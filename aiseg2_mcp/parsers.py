@@ -45,12 +45,15 @@ def _document(html: str) -> lxml.html.HtmlElement:
     return lxml.html.fromstring(html.encode("utf-8"))
 
 
-def normalize_number(raw: object) -> float | None:
+def normalize_number(raw: object, *, cap: bool = True) -> float | None:
     """Normalize an AiSEG2 numeric value to a float, or None when the reading is absent.
 
     Accepts either a JSON number (``2040``) or one of the device's stringy values (``" 224W"``,
     ``"2.0"``, full-width digits). ``"-"`` / empty / no-digits -> None (a genuinely missing value).
-    A negative value or one above ~1e6 is not a plausible reading and raises ValueError.
+
+    ``cap`` (default True) rejects an implausible instantaneous reading — negative, or above ~1e6 —
+    with a ValueError. Set ``cap=False`` for cumulative history/cost cells, whose yearly Wh /
+    0.001-JPY totals legitimately exceed that range.
     """
     if raw is None:
         return None
@@ -66,7 +69,7 @@ def normalize_number(raw: object) -> float | None:
         if not m:
             return None
         value = float(m.group())
-    if value < 0 or value > _MAX_REASONABLE:
+    if cap and (value < 0 or value > _MAX_REASONABLE):
         raise ValueError(f"number out of range: {raw!r}")
     return value
 
@@ -230,38 +233,50 @@ def parse_installation_circuits(html: str) -> list[CircuitInfo]:
 # --- graph/5x111 (daily cumulative totals) -----------------------------------------------------
 
 
-def parse_graph_kwh(html: str) -> float | None:
-    """Extract the cumulative kWh from a graph page (span#val_kwh); "-" -> None."""
-    doc = _document(html)
+def _graph_kwh(doc: lxml.html.HtmlElement) -> float | None:
+    """Extract cumulative kWh (span#val_kwh) from an already-parsed graph document; "-" -> None."""
     vals = doc.xpath('//span[@id="val_kwh"]/text()')
     if not vals:
         raise ValueError("graph: span#val_kwh not found")
     return normalize_number(vals[0])
 
 
-def parse_graph_date(html: str) -> str | None:
-    """Extract the AiSEG2's current day from a graph page (#val_current, "YYYY/MM/DD" -> ISO)."""
-    doc = _document(html)
+def _graph_date(doc: lxml.html.HtmlElement) -> str | None:
+    """Extract the AiSEG2 current day (#val_current, "YYYY/MM/DD" -> ISO) from a parsed graph doc."""
     vals = doc.xpath('//*[@id="val_current"]/text()')
     if not vals:
         return None
     return vals[0].strip().replace("/", "-") or None
 
 
+def parse_graph_kwh(html: str) -> float | None:
+    """Extract the cumulative kWh from a graph page (span#val_kwh); "-" -> None."""
+    return _graph_kwh(_document(html))
+
+
+def parse_graph_date(html: str) -> str | None:
+    """Extract the AiSEG2's current day from a graph page (#val_current, "YYYY/MM/DD" -> ISO)."""
+    return _graph_date(_document(html))
+
+
 def build_daily_totals(
-    date: str | None,
     generation_html: str,
     consumption_html: str,
     buy_html: str,
     sell_html: str,
 ) -> DailyTotals:
-    """Assemble the four graph pages into a DailyTotals (date falls back to '' if absent)."""
+    """Assemble the four graph pages into a DailyTotals.
+
+    The consumption page is parsed once and reused for both the date and its kWh (the current day
+    is identical across all four pages), so consumption HTML is not documented twice.
+    """
+    consumption_doc = _document(consumption_html)
     return DailyTotals(
-        date=date or "",
-        generation_kwh=parse_graph_kwh(generation_html),
-        consumption_kwh=parse_graph_kwh(consumption_html),
-        buy_kwh=parse_graph_kwh(buy_html),
-        sell_kwh=parse_graph_kwh(sell_html),
+        date=_graph_date(consumption_doc) or "",
+        generation_kwh=_graph_kwh(_document(generation_html)),
+        consumption_kwh=_graph_kwh(consumption_doc),
+        buy_kwh=_graph_kwh(_document(buy_html)),
+        sell_kwh=_graph_kwh(_document(sell_html)),
     )
 
 
@@ -310,28 +325,23 @@ class HistoryCsv:
     rows: list[list[str]]
 
 
-def _csv_number(raw: str) -> float | None:
-    """Parse a history CSV cell to a float. ``"-"`` / blank -> None. No upper cap: cumulative Wh /
-    0.001-JPY totals over a year legitimately exceed the instantaneous-reading range guard."""
-    s = str(raw).translate(_ZENKAKU).replace(",", "").strip()
-    if s in ("", "-"):
-        return None
-    m = _NUMBER_RE.search(s)
-    return float(m.group()) if m else None
-
-
 def parse_history_csv(raw: bytes) -> HistoryCsv:
-    """Parse a UTF-8-BOM history/cost CSV into its columns (minus 無効N) and data rows."""
-    rows = list(csv.reader(io.StringIO(raw.decode("utf-8-sig"))))
-    if not rows:
-        raise ValueError("history CSV is empty")
-    header = rows[0]
+    """Parse a UTF-8-BOM history/cost CSV into its columns (minus 無効N) and data rows.
+
+    Single pass over the reader: the header is pulled with ``next(reader)`` and the data rows are
+    streamed, so the CSV text is materialized once.
+    """
+    reader = csv.reader(io.StringIO(raw.decode("utf-8-sig")))
+    try:
+        header = next(reader)
+    except StopIteration:
+        raise ValueError("history CSV is empty") from None
     columns = [
         HistoryColumn(index=idx, name=name, key=STANDARD_METRICS.get(name))
         for idx, name in enumerate(header)
         if idx != 0 and not _INVALID_COLUMN_RE.match(name)
     ]
-    data = [r for r in rows[1:] if r and r[0].strip()]
+    data = [row for row in reader if row and row[0].strip()]
     return HistoryCsv(columns=columns, rows=data)
 
 
@@ -405,7 +415,7 @@ def history_points(
         for col in selected:
             if col.index >= len(row):
                 continue
-            value = _csv_number(row[col.index])
+            value = normalize_number(row[col.index], cap=False)
             if value is None:
                 continue
             points.append(

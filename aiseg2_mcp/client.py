@@ -23,11 +23,18 @@ import httpx
 from mcp.server.fastmcp.exceptions import ToolError
 
 from . import parsers
+from .models import DailyTotals
 
 try:
     __version__ = version("aiseg2-mcp")
 except PackageNotFoundError:  # pragma: no cover - only when running from an unbuilt tree
     __version__ = "0.0.0"
+
+# Graph page ids for the four daily meters (generation / consumption / grid-buy / grid-sell).
+_GRAPH_GENERATION = 51111
+_GRAPH_CONSUMPTION = 52111
+_GRAPH_BUY = 53111
+_GRAPH_SELL = 54111
 
 
 class AisegClient:
@@ -150,6 +157,20 @@ class AisegClient:
         """GET /page/graph/{page_id} -> HTML carrying a day's cumulative kWh (span#val_kwh)."""
         response = await self._send("GET", f"/page/graph/{page_id}")
         return response.text
+
+    async def fetch_daily_totals(self) -> DailyTotals:
+        """Fetch the four daily-total graph pages concurrently and assemble a DailyTotals.
+
+        Graph page ids: generation / consumption / grid-buy / grid-sell. Concurrency is still
+        bounded by the client semaphore.
+        """
+        generation, consumption, buy, sell = await asyncio.gather(
+            self.fetch_graph_html(_GRAPH_GENERATION),
+            self.fetch_graph_html(_GRAPH_CONSUMPTION),
+            self.fetch_graph_html(_GRAPH_BUY),
+            self.fetch_graph_html(_GRAPH_SELL),
+        )
+        return parsers.build_daily_totals(generation, consumption, buy, sell)
 
     async def download_history_zip(self, *, timeout: float = 60.0) -> bytes:
         """Download the SD-card long-term history export as a zip (read-only export).

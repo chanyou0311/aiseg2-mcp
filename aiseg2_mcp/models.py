@@ -97,19 +97,8 @@ class HistorySeriesPoint(BaseModel):
     value: float
 
 
-class HistoryPage(BaseModel):
-    """A paginated slice of long-term energy history (values in ``unit``, typically Wh)."""
-
-    granularity: str
-    unit: str
-    series: list[HistorySeriesPoint]
-    has_more: bool
-    total_rows: int
-    next_offset: int | None = None
-
-
-class CostHistoryPage(BaseModel):
-    """A paginated slice of long-term energy-cost history (values in JPY)."""
+class SeriesPage(BaseModel):
+    """A paginated slice of long-term series data. ``unit`` distinguishes energy (Wh) from cost (JPY)."""
 
     granularity: str
     unit: str

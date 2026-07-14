@@ -19,9 +19,7 @@ AISEG_DISABLE_DNS_REBINDING_PROTECTION=true ONLY in that deployment. The default
 
 from __future__ import annotations
 
-import asyncio
 import logging
-import os
 from typing import Literal
 
 from mcp.server.fastmcp import FastMCP
@@ -36,10 +34,9 @@ from .history import HistoryStore
 from .models import (
     CircuitBreakdown,
     CircuitList,
-    CostHistoryPage,
     DailyTotals,
-    HistoryPage,
     PowerFlow,
+    SeriesPage,
 )
 
 logger = logging.getLogger("aiseg2_mcp")
@@ -47,30 +44,10 @@ logger = logging.getLogger("aiseg2_mcp")
 # response bodies are NEVER part of a message.
 audit = logging.getLogger("aiseg2_mcp.audit")
 
-# Graph page ids for the four daily meters (generation / consumption / buy / sell).
-_GRAPH_GENERATION = 51111
-_GRAPH_CONSUMPTION = 52111
-_GRAPH_BUY = 53111
-_GRAPH_SELL = 54111
-
-
-def _env_flag(name: str) -> bool:
-    return os.getenv(name, "").strip().lower() in ("1", "true", "yes", "on")
-
-
-# transport_security is decided at construction time (before main() reads Settings). Default =
-# None keeps the SDK default (protection ON); only disable it when explicitly opted in.
-_transport_security = (
-    TransportSecuritySettings(enable_dns_rebinding_protection=False)
-    if _env_flag("AISEG_DISABLE_DNS_REBINDING_PROTECTION")
-    else None
-)
-
 mcp = FastMCP(
     "aiseg2-mcp",
     stateless_http=True,
     json_response=True,
-    transport_security=_transport_security,
 )
 
 # Built in main(); the tools read these module globals.
@@ -170,16 +147,8 @@ async def get_daily_totals() -> DailyTotals:
     Returns generation, consumption, grid-buy and grid-sell totals for the day. Any meter the
     device reports as unavailable ("-") comes back as null.
     """
-    generation, consumption, buy, sell = await asyncio.gather(
-        _client().fetch_graph_html(_GRAPH_GENERATION),
-        _client().fetch_graph_html(_GRAPH_CONSUMPTION),
-        _client().fetch_graph_html(_GRAPH_BUY),
-        _client().fetch_graph_html(_GRAPH_SELL),
-    )
     try:
-        # The current day is identical across the four pages; read it from the consumption page.
-        date = parsers.parse_graph_date(consumption)
-        totals = parsers.build_daily_totals(date, generation, consumption, buy, sell)
+        totals = await _client().fetch_daily_totals()
     except ValueError as exc:
         audit.info("get_daily_totals outcome=error")
         raise _tool_error(exc)
@@ -196,7 +165,7 @@ async def get_history(
     circuits: list[str] | None = None,
     limit: int = 200,
     offset: int = 0,
-) -> HistoryPage:
+) -> SeriesPage:
     """Read-only. Query the AiSEG2's long-term energy history from its SD-card export (values in Wh).
 
     Requires an SD card inserted in the AiSEG2. The export is downloaded once and cached, so the
@@ -240,7 +209,7 @@ async def get_cost_history(
     end: str,
     limit: int = 200,
     offset: int = 0,
-) -> CostHistoryPage:
+) -> SeriesPage:
     """Read-only. Query the AiSEG2's long-term energy-cost history from the SD-card export (JPY).
 
     Requires an SD card inserted in the AiSEG2. Shares the same cached download as get_history.

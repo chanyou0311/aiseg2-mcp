@@ -9,14 +9,11 @@ from __future__ import annotations
 
 import asyncio
 import json
-import pathlib
 
 import httpx
 import pytest
 
 from aiseg2_mcp.client import AisegClient
-
-FIXTURES = pathlib.Path(__file__).parent / "fixtures"
 
 
 def _make_client(handler, **kwargs) -> AisegClient:
@@ -111,12 +108,12 @@ async def test_backoff_grows_exponentially(monkeypatch):
     assert slept == [2.0, 3.0]  # base, then base * factor
 
 
-async def test_circuit_paging_stops_at_repeated_page():
+async def test_circuit_paging_stops_at_repeated_page(fixtures_dir):
     # Serve the recorded 1113 fixtures; id>=4 (and 5..) repeat, so paging stops after 4.
     def handler(request: httpx.Request) -> httpx.Response:
         page_id = int(request.url.params["id"])
         idx = min(page_id, 5)  # fixtures exist for id 1..5; 5 repeats 4
-        html = (FIXTURES / f"electricflow_1113_id{idx}.html").read_text(encoding="utf-8")
+        html = (fixtures_dir / f"electricflow_1113_id{idx}.html").read_text(encoding="utf-8")
         return httpx.Response(200, text=html)
 
     client = _make_client(handler)
