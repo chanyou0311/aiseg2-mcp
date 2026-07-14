@@ -1,0 +1,65 @@
+# Reference remote deployment: expose aiseg2-mcp as an authenticated claude.ai Custom Connector.
+#
+#   claude.ai ──OAuth 2.1──> cloudflared (Tunnel) ──> mcp-auth-proxy (GitHub OAuth) ──> aiseg2-mcp
+#
+# The MCP server itself carries NO auth; mcp-auth-proxy (GitHub OAuth) is the trust boundary and the
+# only service the tunnel exposes. NEVER expose aiseg2-mcp directly to the internet. Copy
+# .env.example to .env and fill it in. This is a generic version of the maintainer's own fumo k8s
+# setup (see ../../k8s/).
+services:
+  aiseg2-mcp:
+    image: ghcr.io/chanyou0311/aiseg2-mcp:latest
+    restart: unless-stopped
+    environment:
+      AISEG_URL: ${AISEG_URL}
+      AISEG_USER: ${AISEG_USER:-aiseg}
+      AISEG_PASSWORD: ${AISEG_PASSWORD}
+      AISEG_TRANSPORT: streamable-http
+      # Disabled because this server sits BEHIND mcp-auth-proxy (the trust boundary): the proxied
+      # Host header would otherwise be rejected by the SDK's DNS-rebinding allowlist (HTTP 421).
+      # Only valid because the proxy authenticates every request — do not set this on a directly
+      # exposed server.
+      AISEG_DISABLE_DNS_REBINDING_PROTECTION: "true"
+      AISEG_CACHE_DIR: /cache
+    volumes:
+      - aiseg2-cache:/cache
+    # Internal only: reachable by mcp-auth-proxy on the compose network, never published to the host.
+    expose:
+      - "8000"
+
+  mcp-auth-proxy:
+    image: ghcr.io/sigbit/mcp-auth-proxy:v2.6.1
+    restart: unless-stopped
+    depends_on:
+      - aiseg2-mcp
+    command:
+      - --external-url
+      - ${MCP_EXTERNAL_URL}   # e.g. https://mcp-aiseg2.example.com (must match the Tunnel hostname)
+      - --listen
+      - ":8080"
+      - --no-auto-tls          # TLS is terminated by Cloudflare; the proxy speaks plain http
+      - --github-client-id
+      - ${GITHUB_CLIENT_ID}
+      - --github-client-secret
+      - ${GITHUB_CLIENT_SECRET}
+      - --github-allowed-users
+      # :? makes compose fail fast when unset/empty — an empty allow-list must never
+      # reach the proxy (risk of letting any authenticated GitHub user through).
+      - ${GITHUB_ALLOWED_USERS:?set GITHUB_ALLOWED_USERS to a comma-separated list of GitHub logins}
+      - http://aiseg2-mcp:8000   # upstream MCP server
+    expose:
+      - "8080"
+
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    restart: unless-stopped
+    depends_on:
+      - mcp-auth-proxy
+    command: tunnel run
+    environment:
+      # Token of a remotely-managed Cloudflare Tunnel whose public hostname routes to
+      # http://mcp-auth-proxy:8080 (configure the ingress rule in the Cloudflare dashboard).
+      TUNNEL_TOKEN: ${TUNNEL_TOKEN:?set TUNNEL_TOKEN to your Cloudflare Tunnel token}
+
+volumes:
+  aiseg2-cache:

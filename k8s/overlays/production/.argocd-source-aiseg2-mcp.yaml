@@ -1,0 +1,3 @@
+kustomize:
+  images:
+  - registry.fumo.jp/aiseg2-mcp:0000000

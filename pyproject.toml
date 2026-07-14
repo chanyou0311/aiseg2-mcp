@@ -1,0 +1,56 @@
+# aiseg2-mcp — Unofficial MCP server wrapping a Panasonic AiSEG2 HEMS controller (read-only).
+# Runs as `aiseg2-mcp` (console script) or `python -m aiseg2_mcp`, over stdio by default.
+#
+# Deps rationale:
+#   mcp (official modelcontextprotocol SDK, FastMCP) -> tool surface + stdio / streamable-http
+#     transport. Pin >=1.28,<2: 1.28 is the current stable line; <2 guards the telegraphed v2
+#     breaking changes. This is the official `mcp` package, NOT the third-party `fastmcp` v2.
+#   httpx -> async HTTP + HTTP Digest auth against the AiSEG2 (http only; no HTTPS on the device).
+#   lxml -> parse the AiSEG2 HTML pages (circuit breakdown, installation names, daily graphs).
+#   pydantic / pydantic-settings -> typed return models + typed config from env.
+
+[project]
+name = "aiseg2-mcp"
+description = "Unofficial read-only MCP server for the Panasonic AiSEG2 HEMS controller."
+readme = "README.md"
+requires-python = ">=3.12"
+license = "MIT"
+authors = [{ name = "chanyou0311" }]
+keywords = ["mcp", "aiseg2", "panasonic", "hems", "home-energy"]
+dynamic = ["version"]
+dependencies = [
+    "mcp>=1.28,<2",
+    "httpx>=0.27",
+    "lxml>=5",
+    "pydantic>=2",
+    "pydantic-settings>=2",
+]
+
+[project.scripts]
+aiseg2-mcp = "aiseg2_mcp.server:main"
+
+[project.urls]
+Homepage = "https://github.com/chanyou0311/aiseg2-mcp"
+Repository = "https://github.com/chanyou0311/aiseg2-mcp"
+
+[dependency-groups]
+dev = [
+    "pytest>=8",
+    "pytest-asyncio>=0.23",
+]
+
+[build-system]
+requires = ["hatchling", "hatch-vcs"]
+build-backend = "hatchling.build"
+
+# Version is derived from the git tag (hatch-vcs). No tag yet -> fall back to 0.0.0 so an
+# untagged checkout / sdist still builds and reports a sane version.
+[tool.hatch.version]
+source = "vcs"
+fallback-version = "0.0.0"
+
+[tool.hatch.build.targets.wheel]
+packages = ["aiseg2_mcp"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"

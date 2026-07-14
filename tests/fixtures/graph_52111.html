@@ -1,0 +1,216 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="ja" lang="ja">
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+<meta http-equiv="content-script-type" content="text/javascript" />
+<meta http-equiv="content-style-type" content="text/css" />
+<meta name="viewport" content="width=800" />
+<meta name="referrer" content="no-referrer-when-downgrade" />
+<link href="/contents/Ver.2.97I-01/images/favicon-192x192.png" rel="icon" type="image/png" sizes="192x192" />
+<link href="/contents/Ver.2.97I-01/images/favicon-192x192.png" rel="apple-touch-icon" type="image/png" sizes="192x192" />
+<link href="/contents/Ver.2.97I-01/stylesheets/dialog.new.css" rel="stylesheet" type="text/css" />
+<link href="/contents/Ver.2.97I-01/stylesheets/common.css" rel="stylesheet" type="text/css" />
+<link href="/contents/Ver.2.97I-01/stylesheets/parts.css" rel="stylesheet" type="text/css" />
+
+<link href="/contents/Ver.2.97I-01/stylesheets/graph_bar_common.css" rel="stylesheet" type="text/css" /><link href="/contents/Ver.2.97I-01/stylesheets/graph_bar_660x200.css" rel="stylesheet" type="text/css" /><link href="/contents/Ver.2.97I-01/stylesheets/pages/graph/52111.css" rel="stylesheet" type="text/css" /><title>使用電力量</title>
+
+</head>
+
+<body class="pc">
+<div id="logo">&nbsp;</div>
+<div class="wrap">
+<div id="page">
+
+	<!-- footer -->
+<!--フッターシャドウ-->
+<div id="foot_shadow"></div>
+
+<!--フッターメニュー-->
+<div id="fmenu">
+		<div id="fmbtn_wrapper" class="btn_cnt6">
+		<div id="fmbtn_00" class="fmbtn"><a href="/page/myhome/9" class="fmhit">&nbsp;</a></div>		<div id="fmbtn_01" class="fmbtn"><a href="/page/electricflow/111" class="fmhit">&nbsp;</a></div>		<div id="fmbtn_05" class="fmbtn"><a href="/page/graph/52111" class="fmhit">&nbsp;</a></div>								<div id="fmbtn_02" class="fmbtn"><a href="/page/smartmeter/2" class="fmhit">&nbsp;</a></div>		<div id="fmbtn_06" class="fmbtn"><a href="/page/notice/63" class="fmhit">&nbsp;</a></div>		<div id="fmbtn_07" class="fmbtn"><a href="/page/setting/initial/71" class="fmhit">&nbsp;</a></div>	</div>
+	</div>
+<div id="footer">
+			<div id="footer_back" class="footer_button"><a href="/page/electricflow/111" id="back_button">戻る</a></div>
+	
+			<div id="footer_menu" class="footer_button "><a href="javascript:void(0);" id="menu_button">メニュー</a></div>
+		<div id="footer_info" class="footer_info no_info">&nbsp;</div>
+
+				<div id="footer_copyright" class="footer_copyright">&nbsp;</div>
+			<div id="pvlimit_label" class="button "style="display:none;">
+		<div id="pvlimit_label_text">制御期間中</div>
+		<a href="/page/common/01i" class="hit">&nbsp;</a>
+	</div>
+</div>
+
+
+<div class="contents">
+	<!-- header -->
+	<div id="header">
+	<div id="h_icon" class=h_icon-5>&nbsp;</div>
+	<h1 id="h_title">使用電力量<span id="h_subtitle"></span></h1>
+	<!--パンくず-->
+	<ul id="h_breadcrumbs" class="breadcrumbs">
+ 
+				
+			</ul>
+
+	
+	<div id="h_datetime"></div>
+	<script type="text/javascript">
+		TimeInfoVariable = {};
+		TimeInfoVariable.serverTime = '{"year":"26","month":"7","day":"14","hour":"8","min":"17","sec":"23","weekday":"2"}';
+	</script>
+</div>
+
+		<!-- main -->
+		<div id="main">
+			<div id="tab-area">
+				<div class="tab-set-4">
+									<div class="tab-all tab-active no_sound"></div>
+								
+									<div class="tab-desc-1 hit" href="/page/graph/52211"><a href="javascript:void(0)" class="hit"></a></div>
+								
+									<div class="tab-desc-2 hit" href="/page/graph/52311"><a href="javascript:void(0)" class="hit"></a></div>
+													<div class="tab-desc-3 hit" href="/page/graph/52411"><a href="javascript:void(0)" class="hit"></a></div>
+								</div>
+			</div>
+			<div id="stage" class="day graph_contents">
+				<div id="graph_base"></div>
+				<div id="graph_dot"></div>
+				<div id="last"><canvas id="graph_last" width="660" height="200"></canvas></div>
+				<div id="current"><canvas id="graph_current" width="660" height="200"></canvas></div>
+			</div>
+			<div id="row_num_wrapper" class="graph_contents">
+				<div id="row_unit" class="row_num">(kWh)</div>
+				<div id="row_num0" class="row_num"></div>
+				<div id="row_num1" class="row_num"></div>
+				<div id="row_num2" class="row_num"></div>
+				<div id="row_num3" class="row_num"></div>
+				<div id="row_num4" class="row_num"></div>
+				<div id="row_num5" class="row_num"></div>
+			</div>
+			<div id="info_wrapper">
+									<div id="info_0" class="info">
+						<span class="icolor ic_siyou"></span><span class="istring">：発電</span>
+					</div>
+												<div id="info_2" class="info">
+					<span class="icolor ic_siyou3"></span><span class="istring">：買電</span>
+				</div>
+				<div id="info_last" class="info">
+					<span class="icolor ic_last"></span><span class="istring">：<span id="val_last">07/13</span></span>
+				</div>
+			</div>
+			<div id="txt_val_wrapper" >
+				<div id="txt_val_inner">
+					<div id="val_current">2026/07/14</div>
+					<div id="txt_graph_kwh">
+						<span id="val_kwh">6.118</span><span id="unit_kwh">kWh</span>
+					</div>
+				</div>
+									<div id="g_rbtn_back" class="button nextback back hit" href="/page/graph/52111"><a href="javascript:void(0)" class="hit"></a></div>
+													<div id="g_rbtn_next" class="button nextback next no_sound disable "></div>
+													<div id="g_sbtn_1" class="button dropdown w164 h43">
+						<div class="button_text hit">1日前と比較<a href="javascript:void(0)" class="hit"></a></div>
+					</div>
+							</div>
+
+		<!-- dispalySwitch -->
+					<div id="display_switch_circuit">						<!-- 回路ボタンあり -->
+			<div id="g_cbtn_wrapper" class="combo_wrapper">
+
+				<!-- ボタン1つの場合は表示しない -->
+				<!-- 発電量, 買電量, 売電量 -->
+				
+																												<!-- 左端 -->
+													<div id="g_btn_solar" class="button combo w86 h43 hit" href="/page/graph/51111">
+								<div class="button_text">発電量<a href="javascript:void(0)" class="hit"></a></div>
+							</div>
+																																															<div id="g_btn_buy" class="button combo w82 h43 hit" href="/page/graph/53111">
+								<div class="button_text">買電量<a href="javascript:void(0)" class="hit"></a></div>
+							</div>
+																																															<div id="g_btn_sell" class="button combo w82 h43 hit" href="/page/graph/54111">
+								<div class="button_text">売電量<a href="javascript:void(0)" class="hit"></a></div>
+							</div>
+																			
+				<!-- 使用電力量 -->
+															<div id="g_btn_usage" class="button combo w102 h43 no_sound selected">
+							<div class="button_text">使用電力量</div>
+						</div>
+									
+				<!-- 湯, 水, ガス -->
+				
+																													<!-- 右端 -->
+													<div id="g_btn_hotwater" class="button combo w88 h43 hit" href="/page/graph/55111">
+								<div class="button_text">湯<a href="javascript:void(0)" class="hit"></a></div>
+							</div>
+																						
+		</div>
+		</div>								<!-- 回路ボタンあり -->
+	
+	<!-- 回路ボタン -->
+			<div id="g_btn_1" class="button w104 h43 hit" href="/page/graph/581">
+			<div class="button_text">回路ごと<a href="javascript:void(0)" class="hit"></a></div>
+		</div>
+	
+		</div>
+</div>
+
+
+
+
+<div id="popup">
+	<div class="popup_layer">&nbsp;</div>
+	<div class="popup_base_img p_681x368">&nbsp;</div>
+	<div id="popup_base" class="p_681x368">
+								<div class="popup_detail">
+										<div class="w194 h46 radio  radio_on radio_0" value="" href=""  nofunc>
+							<div class="button_text">1日前と比較</div>
+													</div>
+															<div class="w194 h46 radio  radio_1" value="" href="/page/graph/52112"  nofunc>
+							<div class="button_text">1週間前と比較</div>
+							<a href="javascript:void(0)" class="hit"></a>						</div>
+												</div>
+				<div id="popup_button_cb" class="w112 h46 button  popup_button_cancel">
+				<div class="button_text">中止<a href="javascript:void(0)" class="hit"></a></div>
+		</div>
+	</div>
+</div>
+
+	<!--非フッター領域-->
+	<div id="hitLayer">
+	  <img id="hitObject" src="/contents/Ver.2.97I-01/images/spacer.png" width="800" height="330" alt="" />
+	</div>
+</div>
+</div>
+
+<!-- ▽▽▽ *********************** java script loading *********************** ▽▽▽ -->
+<script type="text/javascript" src="/contents/Ver.2.97I-01/javascripts/device.js"></script>
+	<script type="text/javascript">
+					var version = 'Ver.2.97I-01';
+							var graph_data = {"unit":"day","total1":[0,0,0,0,0,0.064,0.419,0.768,0.252,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],"val2":[0.736,0.679,0.443,0.446,0.495,0.418,0.861,0.537,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],"val3":[],"total2":[0.739,0.658,0.448,0.431,0.456,0.468,1.347,1.052,0.83,2.036,0.96,0.951,1.309,1.037,1.448,0.747,0.653,0.738,1.797,2.019,1.838,2.037,2.265,1.191],"max":5,"totalValue":"6.118","connectInfo":{"gen":1,"sto":0},"graph_num":2,"gen":1};
+										var tabs = {"day":[2026,7,14],"month_compare":"mon","day_compare":"day"};
+		var back_url = '/page/graph/52111';
+
+		var termStr = 'day';
+		var term = '2026/07/14';
+			</script>
+	<script type="text/javascript" src="/contents/Ver.2.97I-01/javascripts/common.new.js"></script>
+	<script type="text/javascript" src="/contents/Ver.2.97I-01/javascripts/graph_bar_function.js"></script>
+	<script type="text/javascript" src="/contents/Ver.2.97I-01/javascripts/graph_bar_660x200.js"></script>	<script type="text/javascript" src="/contents/Ver.2.97I-01/javascripts/footermenu.new.js"></script>
+	<script type="text/javascript" src="/contents/Ver.2.97I-01/javascripts/util.js"></script>
+	<script type="text/javascript" src="/contents/Ver.2.97I-01/javascripts/util_base64.js"></script>
+	<script type="text/javascript" src="/contents/Ver.2.97I-01/javascripts/pages/graph/52111.js"></script>
+			<script type="text/javascript" src="/contents/Ver.2.97I-01/javascripts/operation_check.js"></script>
+		<script type="text/javascript">
+			</script>
+<script type="text/javascript" src="/contents/Ver.2.97I-01/javascripts/time.js"></script>
+				<script type="text/javascript" src="/contents/Ver.2.97I-01/javascripts/footer_pvlimit.js"></script>
+		<script type="text/javascript">
+			</script>
+<!-- △△△ *********************** java script loading *********************** △△△ -->
+
+<!--End #page-->
+</body>
+</html>

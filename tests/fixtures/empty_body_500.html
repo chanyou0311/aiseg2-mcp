@@ -1,0 +1,14 @@
+<!--
+  SYNTHETIC fixture. The plan documented that POSTing an empty body to
+  /data/electricflow/111/update returns HTTP 500 with the body "AiSEGの状態が更新されました".
+  The verified unit (FW Ver.2.97I-01) actually returns 200 for an empty body, so a real 500
+  page could not be recorded. This representative page exists only to document the shape the
+  500-retry path defends against; the retry behaviour itself is covered by test_client.py via
+  httpx.MockTransport, not by this file.
+-->
+<html>
+<head><title>500 Internal Server Error</title></head>
+<body>
+<div id="message">AiSEGの状態が更新されました</div>
+</body>
+</html>
