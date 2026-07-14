@@ -84,3 +84,36 @@ class DailyTotals(BaseModel):
     consumption_kwh: float | None = None
     buy_kwh: float | None = None
     sell_kwh: float | None = None
+
+
+# --- SD-card long-term history -----------------------------------------------------------------
+
+
+class HistorySeriesPoint(BaseModel):
+    """One long-form data point: a timestamp, the series (metric key or circuit name), a value."""
+
+    timestamp: str
+    metric: str
+    value: float
+
+
+class HistoryPage(BaseModel):
+    """A paginated slice of long-term energy history (values in ``unit``, typically Wh)."""
+
+    granularity: str
+    unit: str
+    series: list[HistorySeriesPoint]
+    has_more: bool
+    total_rows: int
+    next_offset: int | None = None
+
+
+class CostHistoryPage(BaseModel):
+    """A paginated slice of long-term energy-cost history (values in JPY)."""
+
+    granularity: str
+    unit: str
+    series: list[HistorySeriesPoint]
+    has_more: bool
+    total_rows: int
+    next_offset: int | None = None

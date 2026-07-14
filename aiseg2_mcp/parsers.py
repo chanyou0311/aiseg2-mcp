@@ -12,8 +12,11 @@ dispBuySell + dispBattery, the 1113 stage layout, the installation/734 ``init({.
 
 from __future__ import annotations
 
+import csv
+import io
 import json
 import re
+from dataclasses import dataclass
 
 import lxml.html
 
@@ -23,6 +26,7 @@ from .models import (
     CircuitInfo,
     CircuitWatt,
     DailyTotals,
+    HistorySeriesPoint,
     NamedWatt,
     PowerFlow,
 )
@@ -259,3 +263,152 @@ def build_daily_totals(
         buy_kwh=parse_graph_kwh(buy_html),
         sell_kwh=parse_graph_kwh(sell_html),
     )
+
+
+# --- SD-card history CSVs (30min / hour / day / month / year, + cost) --------------------------
+
+# Japanese CSV header -> stable English metric key for the fixed leading columns. Columns not in
+# this map (per-circuit columns, plus tail utility meters like 使用電力量 / ガス使用量) keep their
+# Japanese header text as their series label. 計測日時 is the timestamp column (index 0).
+STANDARD_METRICS: dict[str, str] = {
+    "太陽光発電(創蓄パワコン)": "generation_pcs",
+    "蓄電池充電": "battery_charge",
+    "蓄電池放電": "battery_discharge",
+    "主幹買電": "grid_buy",
+    "主幹売電": "grid_sell",
+    "太陽光発電(PV1)": "generation_pv1",
+    "太陽光発電(PV2)": "generation_pv2",
+    "HP消費電力量": "heatpump_consumption",
+    "燃料電池発電電力量": "fuelcell_generation",
+    "EV充電電力量": "ev_charge",
+    "EV放電電力量": "ev_discharge",
+}
+
+# "無効N" columns are reserved/disabled measurement slots and are always dropped.
+_INVALID_COLUMN_RE = re.compile(r"^無効\d+$")
+
+
+@dataclass
+class HistoryColumn:
+    """One selectable CSV column: its position, display name, and English key (None if not fixed)."""
+
+    index: int
+    name: str
+    key: str | None
+
+    @property
+    def label(self) -> str:
+        """The series label to surface: the English key when the column is a fixed metric."""
+        return self.key or self.name
+
+
+@dataclass
+class HistoryCsv:
+    """A parsed history CSV: its selectable columns and its data rows (timestamp in row[0])."""
+
+    columns: list[HistoryColumn]
+    rows: list[list[str]]
+
+
+def _csv_number(raw: str) -> float | None:
+    """Parse a history CSV cell to a float. ``"-"`` / blank -> None. No upper cap: cumulative Wh /
+    0.001-JPY totals over a year legitimately exceed the instantaneous-reading range guard."""
+    s = str(raw).translate(_ZENKAKU).replace(",", "").strip()
+    if s in ("", "-"):
+        return None
+    m = _NUMBER_RE.search(s)
+    return float(m.group()) if m else None
+
+
+def parse_history_csv(raw: bytes) -> HistoryCsv:
+    """Parse a UTF-8-BOM history/cost CSV into its columns (minus 無効N) and data rows."""
+    rows = list(csv.reader(io.StringIO(raw.decode("utf-8-sig"))))
+    if not rows:
+        raise ValueError("history CSV is empty")
+    header = rows[0]
+    columns = [
+        HistoryColumn(index=idx, name=name, key=STANDARD_METRICS.get(name))
+        for idx, name in enumerate(header)
+        if idx != 0 and not _INVALID_COLUMN_RE.match(name)
+    ]
+    data = [r for r in rows[1:] if r and r[0].strip()]
+    return HistoryCsv(columns=columns, rows=data)
+
+
+def history_timestamp(raw: str, granularity: str) -> tuple[str, str]:
+    """Return (ISO display, range key) for a raw history timestamp at ``granularity``.
+
+    The device encodes the timestamp differently per granularity; the range key is the coarser
+    ``YYYY-MM-DD`` / ``YYYY-MM`` / ``YYYY`` used to filter against start/end (ISO string compare is
+    chronological). 30min = ``202604120030+0900``, hour = ``2026041200+0900``, day = ``20250701``,
+    month = ``202501``, year = ``2014``.
+    """
+    ts = raw.strip()
+    if granularity in ("30min", "hour"):
+        digits = ts.split("+", 1)[0]
+        tz = ts[len(digits) :] or "+0900"
+        y, mo, d, h = digits[0:4], digits[4:6], digits[6:8], digits[8:10]
+        mi = digits[10:12] if granularity == "30min" else "00"
+        offset = f"{tz[:3]}:{tz[3:]}" if len(tz) == 5 else tz
+        return f"{y}-{mo}-{d}T{h}:{mi}:00{offset}", f"{y}-{mo}-{d}"
+    if granularity == "day":
+        y, mo, d = ts[0:4], ts[4:6], ts[6:8]
+        iso = f"{y}-{mo}-{d}"
+        return iso, iso
+    if granularity == "month":
+        y, mo = ts[0:4], ts[4:6]
+        iso = f"{y}-{mo}"
+        return iso, iso
+    if granularity == "year":
+        return ts, ts
+    raise ValueError(f"unknown granularity: {granularity!r}")
+
+
+def _select_columns(
+    columns: list[HistoryColumn],
+    metrics: list[str] | None,
+    circuits: list[str] | None,
+) -> list[HistoryColumn]:
+    """Choose columns per the metrics/circuits filters (both None -> every non-無効 column)."""
+    if metrics is None and circuits is None:
+        return columns
+    wanted_metrics = set(metrics or [])
+    wanted_circuits = set(circuits or [])
+    selected: list[HistoryColumn] = []
+    for col in columns:
+        by_metric = bool(wanted_metrics) and (col.key in wanted_metrics or col.name in wanted_metrics)
+        by_circuit = bool(wanted_circuits) and col.name in wanted_circuits
+        if by_metric or by_circuit:
+            selected.append(col)
+    return selected
+
+
+def history_points(
+    parsed: HistoryCsv,
+    granularity: str,
+    start: str,
+    end: str,
+    metrics: list[str] | None,
+    circuits: list[str] | None,
+    scale: float = 1.0,
+) -> list[HistorySeriesPoint]:
+    """Long-form the selected columns of one CSV into points within [start, end], missing dropped.
+
+    ``scale`` converts the raw cell (1.0 for Wh history; 0.001 for 0.001-JPY cost -> JPY).
+    """
+    selected = _select_columns(parsed.columns, metrics, circuits)
+    points: list[HistorySeriesPoint] = []
+    for row in parsed.rows:
+        display, key = history_timestamp(row[0], granularity)
+        if not (start <= key <= end):
+            continue
+        for col in selected:
+            if col.index >= len(row):
+                continue
+            value = _csv_number(row[col.index])
+            if value is None:
+                continue
+            points.append(
+                HistorySeriesPoint(timestamp=display, metric=col.label, value=value * scale)
+            )
+    return points

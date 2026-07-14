@@ -43,4 +43,10 @@ class Settings(BaseSettings):
         default=False, alias="AISEG_DISABLE_DNS_REBINDING_PROTECTION"
     )
 
+    # --- SD-card history cache ---
+    # Where the downloaded history zip is extracted. Empty -> <tempdir>/aiseg2-mcp-cache.
+    aiseg_cache_dir: str = Field(default="", alias="AISEG_CACHE_DIR")
+    # How long a cached export is reused before re-downloading (seconds).
+    aiseg_cache_ttl: int = Field(default=3600, alias="AISEG_CACHE_TTL")
+
     log_level: str = Field(default="info", alias="LOG_LEVEL")

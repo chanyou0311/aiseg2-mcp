@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import re
 from importlib.metadata import PackageNotFoundError, version
 
 import httpx
@@ -73,20 +74,23 @@ class AisegClient:
         *,
         params: dict[str, object] | None = None,
         data: dict[str, str] | None = None,
+        timeout: float | None = None,
     ) -> httpx.Response:
         """Send one request with concurrency limit + exponential backoff on transient failures.
 
         4xx is a client-side mistake and fails immediately; timeouts / transport errors / 5xx are
-        retried up to ``max_attempts`` with a growing delay, then surfaced as a ToolError.
+        retried up to ``max_attempts`` with a growing delay, then surfaced as a ToolError. A
+        ``timeout`` override widens the deadline for slow endpoints (the history zip export).
         """
+        request_kwargs: dict[str, object] = {"params": params, "data": data}
+        if timeout is not None:
+            request_kwargs["timeout"] = timeout
         delay = self._retry_base_delay
         last: object = None
         for attempt in range(self._max_attempts):
             try:
                 async with self._sem:
-                    response = await self._client().request(
-                        method, path, params=params, data=data
-                    )
+                    response = await self._client().request(method, path, **request_kwargs)
             except (httpx.TimeoutException, httpx.TransportError) as exc:
                 last = exc
             else:
@@ -146,3 +150,23 @@ class AisegClient:
         """GET /page/graph/{page_id} -> HTML carrying a day's cumulative kWh (span#val_kwh)."""
         response = await self._send("GET", f"/page/graph/{page_id}")
         return response.text
+
+    async def download_history_zip(self, *, timeout: float = 60.0) -> bytes:
+        """Download the SD-card long-term history export as a zip (read-only export).
+
+        Two GETs, both Digest-authed: fetch /set/exectop2.cgi to read the ``csrftoken`` the export
+        requires, then GET the same CGI with ``downType=1`` + that token to receive the zip. This
+        is a data export (no device state changes); the wider timeout accommodates the device
+        building the archive.
+        """
+        page = await self._send("GET", "/set/exectop2.cgi")
+        match = re.search(r'NAME="csrftoken"\s+VALUE="(\d+)"', page.text, re.IGNORECASE)
+        if not match:
+            raise ToolError("csrftoken not found on /set/exectop2.cgi (SD card inserted?)")
+        response = await self._send(
+            "GET",
+            "/set/exectop2.cgi",
+            params={"downType": 1, "csrftoken": match.group(1)},
+            timeout=timeout,
+        )
+        return response.content
