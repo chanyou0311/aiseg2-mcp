@@ -22,6 +22,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+from typing import Literal
 
 from mcp.server.fastmcp import FastMCP
 from mcp.server.fastmcp.exceptions import ToolError
@@ -31,7 +32,15 @@ from mcp.types import ToolAnnotations
 from . import parsers
 from .client import AisegClient
 from .config import Settings
-from .models import CircuitBreakdown, CircuitList, DailyTotals, PowerFlow
+from .history import HistoryStore
+from .models import (
+    CircuitBreakdown,
+    CircuitList,
+    CostHistoryPage,
+    DailyTotals,
+    HistoryPage,
+    PowerFlow,
+)
 
 logger = logging.getLogger("aiseg2_mcp")
 # Dedicated audit stream (records each tool call: outcome + counts/timing only). Credentials and
@@ -64,14 +73,21 @@ mcp = FastMCP(
     transport_security=_transport_security,
 )
 
-# Built in main(); the tools read this module global.
+# Built in main(); the tools read these module globals.
 _aiseg: AisegClient | None = None
+_history: HistoryStore | None = None
 
 
 def _client() -> AisegClient:
     if _aiseg is None:  # pragma: no cover - guarded by main() init ordering
         raise RuntimeError("AiSEG2 client is not initialized")
     return _aiseg
+
+
+def _store() -> HistoryStore:
+    if _history is None:  # pragma: no cover - guarded by main() init ordering
+        raise RuntimeError("AiSEG2 history store is not initialized")
+    return _history
 
 
 # Shared annotations: every tool is a read-only, non-destructive, idempotent observation of a
@@ -171,13 +187,95 @@ async def get_daily_totals() -> DailyTotals:
     return totals
 
 
+@mcp.tool(annotations=_READ_ONLY)
+async def get_history(
+    granularity: Literal["30min", "hour", "day", "month", "year"],
+    start: str,
+    end: str,
+    metrics: list[str] | None = None,
+    circuits: list[str] | None = None,
+    limit: int = 200,
+    offset: int = 0,
+) -> HistoryPage:
+    """Read-only. Query the AiSEG2's long-term energy history from its SD-card export (values in Wh).
+
+    Requires an SD card inserted in the AiSEG2. The export is downloaded once and cached, so the
+    first call is slow and later calls are fast. Returns long-form points ({timestamp, metric,
+    value}); use limit/offset to page (limit caps the number of returned points).
+
+    Args:
+        granularity: Time resolution. "30min"/"hour"/"day" take start/end as YYYY-MM-DD; "month"
+            takes YYYY-MM; "year" takes YYYY.
+        start: Range start (inclusive), formatted per the granularity.
+        end: Range end (inclusive), formatted per the granularity.
+        metrics: Optional filter by standard series keys (e.g. "generation_pv1", "grid_buy",
+            "grid_sell", "battery_charge", "battery_discharge", "ev_charge") or their Japanese
+            header names. Omit for all series.
+        circuits: Optional filter by circuit name (see list_circuits). Omit for all circuits.
+        limit: Maximum number of series points to return (default 200).
+        offset: Number of points to skip (for pagination).
+    """
+    try:
+        page = await _store().get_history(
+            granularity, start, end, metrics, circuits, limit, offset
+        )
+    except ValueError as exc:  # malformed CSV -> ToolError (store already raises ToolError itself)
+        audit.info("get_history outcome=error")
+        raise _tool_error(exc)
+    audit.info(
+        "get_history outcome=ok granularity=%s start=%s end=%s points=%d total=%d",
+        granularity,
+        start,
+        end,
+        len(page.series),
+        page.total_rows,
+    )
+    return page
+
+
+@mcp.tool(annotations=_READ_ONLY)
+async def get_cost_history(
+    granularity: Literal["day", "month", "year"],
+    start: str,
+    end: str,
+    limit: int = 200,
+    offset: int = 0,
+) -> CostHistoryPage:
+    """Read-only. Query the AiSEG2's long-term energy-cost history from the SD-card export (JPY).
+
+    Requires an SD card inserted in the AiSEG2. Shares the same cached download as get_history.
+    Returns long-form cost points ({timestamp, metric, value}) with values in Japanese yen.
+
+    Args:
+        granularity: "day" takes start/end as YYYY-MM-DD; "month" as YYYY-MM; "year" as YYYY.
+        start: Range start (inclusive), formatted per the granularity.
+        end: Range end (inclusive), formatted per the granularity.
+        limit: Maximum number of series points to return (default 200).
+        offset: Number of points to skip (for pagination).
+    """
+    try:
+        page = await _store().get_cost_history(granularity, start, end, limit, offset)
+    except ValueError as exc:
+        audit.info("get_cost_history outcome=error")
+        raise _tool_error(exc)
+    audit.info(
+        "get_cost_history outcome=ok granularity=%s start=%s end=%s points=%d total=%d",
+        granularity,
+        start,
+        end,
+        len(page.series),
+        page.total_rows,
+    )
+    return page
+
+
 def _tool_error(exc: ValueError) -> ToolError:
     """Wrap a parser ValueError (which names the missing key/selector) as a ToolError."""
     return ToolError(str(exc))
 
 
 def main() -> None:
-    global _aiseg
+    global _aiseg, _history
     settings = Settings()  # env (+ local .env); missing AISEG_URL / AISEG_PASSWORD -> ValidationError
     logging.basicConfig(
         level=settings.log_level.upper(),
@@ -188,6 +286,11 @@ def main() -> None:
         base_url=settings.aiseg_url,
         user=settings.aiseg_user,
         password=settings.aiseg_password,
+    )
+    _history = HistoryStore(
+        _aiseg,
+        cache_dir=settings.aiseg_cache_dir or None,
+        ttl=settings.aiseg_cache_ttl,
     )
 
     if settings.aiseg_transport == "streamable-http":
