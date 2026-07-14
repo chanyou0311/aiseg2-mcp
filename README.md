@@ -34,25 +34,51 @@ GETs and the display-only refresh POSTs the web UI itself uses; it never touches
 | `get_circuit_breakdown` | Every measured circuit's instantaneous draw (W), ranked highest first, with the total |
 | `list_circuits` | Registered circuit ids and names (the authoritative naming source) |
 | `get_daily_totals` | Today's cumulative generation / consumption / grid-buy / grid-sell (kWh) |
+| `get_history` | Long-term energy history from the SD-card export (Wh), long-form points. Args: `granularity` (`30min`/`hour`/`day`/`month`/`year`), `start`/`end` (per granularity: `YYYY-MM-DD`, `YYYY-MM`, or `YYYY`), optional `metrics`/`circuits` filters, `limit`/`offset` paging |
+| `get_cost_history` | Long-term energy-cost history from the SD-card export (JPY). Args: `granularity` (`day`/`month`/`year`), `start`/`end`, `limit`/`offset` |
+
+> **The two history tools require an SD card inserted in the AiSEG2** — they read the device's SD-card CSV export. The export is downloaded once and cached (see `AISEG_CACHE_DIR` / `AISEG_CACHE_TTL`), so the first call is slow and later calls are fast.
 
 ## Install & run
 
-Requires Python 3.12+ and [uv](https://docs.astral.sh/uv/).
+Three ways to run it, depending on your setup.
+
+### 1. uvx (PyPI — once published)
+
+The simplest option for a local (stdio) MCP client. Requires [uv](https://docs.astral.sh/uv/).
 
 ```bash
-uv sync
-# stdio (default) — run directly:
-AISEG_URL=http://192.168.0.216 AISEG_PASSWORD=... uv run aiseg2-mcp
+AISEG_URL=http://192.168.0.216 AISEG_PASSWORD=... uvx aiseg2-mcp
 ```
 
-Add it to Claude Code as an MCP server (stdio):
+Add it to Claude Code:
 
 ```bash
-# TODO: once published to PyPI, replace `uv run` with `uvx aiseg2-mcp`.
 claude mcp add aiseg2 \
   --env AISEG_URL=http://192.168.0.216 \
   --env AISEG_PASSWORD=your-digest-password \
-  -- uv run --directory /path/to/aiseg2-mcp aiseg2-mcp
+  -- uvx aiseg2-mcp
+```
+
+### 2. docker run (GHCR)
+
+The container defaults to the `streamable-http` transport (long-lived network service). Only expose
+it behind an authenticating proxy — see [Security](#security).
+
+```bash
+docker run --rm -p 8000:8000 \
+  -e AISEG_URL=http://192.168.0.216 \
+  -e AISEG_PASSWORD=your-digest-password \
+  ghcr.io/chanyou0311/aiseg2-mcp:latest
+```
+
+### 3. From source
+
+Requires Python 3.12+ and uv.
+
+```bash
+uv sync
+AISEG_URL=http://192.168.0.216 AISEG_PASSWORD=... uv run aiseg2-mcp
 ```
 
 ## Configuration (environment variables)
@@ -66,6 +92,8 @@ claude mcp add aiseg2 \
 | `AISEG_HOST` | no | `0.0.0.0` | Bind host (streamable-http only) |
 | `AISEG_PORT` | no | `8000` | Bind port (streamable-http only) |
 | `AISEG_DISABLE_DNS_REBINDING_PROTECTION` | no | `false` | Disable the SDK Host allowlist — **only** behind a trusted auth proxy |
+| `AISEG_CACHE_DIR` | no | `<tempdir>/aiseg2-mcp-cache` | Where the SD-card history export is cached |
+| `AISEG_CACHE_TTL` | no | `3600` | Seconds to reuse a cached history export before re-downloading |
 | `LOG_LEVEL` | no | `info` | Log level |
 
 ## Security
