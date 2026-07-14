@@ -81,6 +81,12 @@ uv sync
 AISEG_URL=http://192.168.0.216 AISEG_PASSWORD=... uv run aiseg2-mcp
 ```
 
+### Remote (authenticated claude.ai Custom Connector)
+
+To reach the server from claude.ai while your AiSEG2 stays on your LAN, see
+[`examples/remote/`](./examples/remote/) — a Docker Compose stack (MCP + GitHub-OAuth proxy +
+Cloudflare Tunnel).
+
 ## Configuration (environment variables)
 
 | Variable | Required | Default | Description |

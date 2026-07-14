@@ -81,6 +81,11 @@ uv sync
 AISEG_URL=http://192.168.0.216 AISEG_PASSWORD=... uv run aiseg2-mcp
 ```
 
+### リモート（認証付き claude.ai Custom Connector）
+
+AiSEG2 を LAN 内に置いたまま claude.ai から接続するには、[`examples/remote/`](./examples/remote/)
+を参照してください（MCP + GitHub OAuth プロキシ + Cloudflare Tunnel の Docker Compose 構成）。
+
 ## 設定（環境変数）
 
 | 変数 | 必須 | 既定値 | 説明 |
