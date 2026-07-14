@@ -43,7 +43,9 @@ services:
       - --github-client-secret
       - ${GITHUB_CLIENT_SECRET}
       - --github-allowed-users
-      - ${GITHUB_ALLOWED_USERS}  # comma-separated GitHub logins allowed to connect
+      # :? makes compose fail fast when unset/empty — an empty allow-list must never
+      # reach the proxy (risk of letting any authenticated GitHub user through).
+      - ${GITHUB_ALLOWED_USERS:?set GITHUB_ALLOWED_USERS to a comma-separated list of GitHub logins}
       - http://aiseg2-mcp:8000   # upstream MCP server
     expose:
       - "8080"
@@ -57,7 +59,7 @@ services:
     environment:
       # Token of a remotely-managed Cloudflare Tunnel whose public hostname routes to
       # http://mcp-auth-proxy:8080 (configure the ingress rule in the Cloudflare dashboard).
-      TUNNEL_TOKEN: ${TUNNEL_TOKEN}
+      TUNNEL_TOKEN: ${TUNNEL_TOKEN:?set TUNNEL_TOKEN to your Cloudflare Tunnel token}
 
 volumes:
   aiseg2-cache:

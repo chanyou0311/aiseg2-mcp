@@ -90,7 +90,10 @@ spec:
               memory: "512Mi"
       volumes:
         - name: cache
-          emptyDir: {}
+          emptyDir:
+            # Bounded: the SD-card export is <1MB zipped (~10MB extracted); prevents
+            # node DiskPressure if a firmware ever returns unexpectedly large exports.
+            sizeLimit: 256Mi
 ---
 apiVersion: v1
 kind: Service
