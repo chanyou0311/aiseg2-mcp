@@ -20,6 +20,8 @@ EXPECTED_TOOLS = {
     "get_circuit_breakdown",
     "list_circuits",
     "get_daily_totals",
+    "get_history",
+    "get_cost_history",
 }
 
 PACKAGE = pathlib.Path(__file__).resolve().parent.parent / "aiseg2_mcp"
