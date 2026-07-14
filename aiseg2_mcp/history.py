@@ -272,6 +272,10 @@ class HistoryStore:
         scale: float,
     ) -> list[HistorySeriesPoint]:
         spec = _spec(kind, granularity)
+        try:
+            parsers.validate_range(granularity, start, end)
+        except ValueError as exc:
+            raise ToolError(str(exc)) from exc
         await self._ensure_fresh()
         key = (kind, granularity, start, end, tuple(metrics or ()), tuple(circuits or ()))
         if self._memo_key == key and self._memo_fetched_at == self._fetched_at:

@@ -91,6 +91,24 @@ def test_parse_power_flow_meas_reg_zero_raises(read_text):
         parsers.parse_power_flow({**base, "measReg": 0})
 
 
+def test_parse_power_flow_tolerates_bad_auxiliary_entry(read_text):
+    # A wild value in a top-consumer entry is dropped, not raised — the primary reading survives.
+    base = json.loads(read_text("electricflow_111.json"))
+    flow = parsers.parse_power_flow({**base, "u_d_2_capacity": 9999999})
+    assert flow.generation_kw == 2.1
+    assert flow.consumption_kw == 1.2
+    names = [c.name for c in flow.top_consumers]
+    assert "洋室３" not in names  # the out-of-range u_d_2 entry was dropped
+    assert "ＬＤＫ・エアコン" in names  # healthy entries survive
+
+
+def test_parse_power_flow_primary_value_stays_strict(read_text):
+    # By contrast, a wild PRIMARY value (u_capacity) is a hard error, not silently dropped.
+    base = json.loads(read_text("electricflow_111.json"))
+    with pytest.raises(ValueError):
+        parsers.parse_power_flow({**base, "u_capacity": "9999999"})
+
+
 # --- circuit breakdown (electricflow/1113) -----------------------------------------------------
 
 

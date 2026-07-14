@@ -101,6 +101,13 @@ class AisegClient:
             except (httpx.TimeoutException, httpx.TransportError) as exc:
                 last = exc
             else:
+                if response.is_redirect:
+                    # We never follow redirects; a 3xx here means a wrong base URL or an auth/login
+                    # bounce, not a normal AiSEG2 response. Fail loudly instead of returning HTML.
+                    raise ToolError(
+                        f"AiSEG2 {method} {path} -> unexpected redirect (HTTP {response.status_code} "
+                        f"to {response.headers.get('location')!r}); check AISEG_URL / credentials"
+                    )
                 if response.status_code < 500:
                     if response.is_error:
                         raise ToolError(
@@ -181,13 +188,16 @@ class AisegClient:
         building the archive.
         """
         page = await self._send("GET", "/set/exectop2.cgi")
-        match = re.search(r'NAME="csrftoken"\s+VALUE="(\d+)"', page.text, re.IGNORECASE)
-        if not match:
+        token = parsers.extract_input_value(page.text, "csrftoken")
+        if not token:  # lxml did not find it -> regex fallback (value is not always numeric)
+            match = re.search(r'name="csrftoken"\s+value="([^"]+)"', page.text, re.IGNORECASE)
+            token = match.group(1) if match else None
+        if not token:
             raise ToolError("csrftoken not found on /set/exectop2.cgi (SD card inserted?)")
         response = await self._send(
             "GET",
             "/set/exectop2.cgi",
-            params={"downType": 1, "csrftoken": match.group(1)},
+            params={"downType": 1, "csrftoken": token},
             timeout=timeout,
         )
         return response.content

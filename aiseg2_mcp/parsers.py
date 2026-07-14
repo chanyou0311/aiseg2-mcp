@@ -15,7 +15,9 @@ from __future__ import annotations
 import csv
 import io
 import json
+import logging
 import re
+import unicodedata
 from dataclasses import dataclass
 
 import lxml.html
@@ -38,11 +40,27 @@ _NUMBER_RE = re.compile(r"[0-9]+(?:\.[0-9]+)?")
 # Values above this are treated as a device/parse error rather than a real reading.
 _MAX_REASONABLE = 999_999.0
 
+# Audit stream (same name as the server's): used to note dropped auxiliary readings.
+audit = logging.getLogger("aiseg2_mcp.audit")
+
 
 def _document(html: str) -> lxml.html.HtmlElement:
     """Parse an AiSEG2 page. The pages are XHTML with an ``<?xml ... encoding?>`` declaration, which
     lxml rejects on a ``str`` input — so we hand it UTF-8 bytes and let it honour the declaration."""
     return lxml.html.fromstring(html.encode("utf-8"))
+
+
+def extract_input_value(html: str, name: str) -> str | None:
+    """Value of ``<input name="...">`` via lxml (attribute names are lowercased), or None.
+
+    Used for the download CSRF token; lxml handles the real (large) page's markup, and the caller
+    keeps a regex fallback for anything lxml cannot parse.
+    """
+    try:
+        vals = _document(html).xpath(f'//input[@name="{name}"]/@value')
+    except Exception:  # pragma: no cover - malformed HTML -> let the caller's regex fallback try
+        return None
+    return vals[0] if vals and vals[0] else None
 
 
 def normalize_number(raw: object, *, cap: bool = True) -> float | None:
@@ -81,6 +99,26 @@ def normalize_number(raw: object, *, cap: bool = True) -> float | None:
 _BUY_SELL = {0: "buy", 1: "sell", 2: "none"}
 
 
+def _named_watt(title_raw: object, capacity_raw: object) -> NamedWatt | None:
+    """Build a NamedWatt from an auxiliary title/capacity pair, tolerating a bad value.
+
+    Auxiliary breakdown entries (generation sources, top consumers) are secondary: an unlabelled,
+    missing, or out-of-range one is dropped (audited) rather than raised, so a single wild value
+    does not fail the whole power-flow reading. The primary g_capacity/u_capacity stay strict.
+    """
+    title = str(title_raw or "").strip()
+    if not title:
+        return None
+    try:
+        watt = normalize_number(capacity_raw)
+    except ValueError:
+        audit.warning("power_flow: dropping entry %r with out-of-range value %r", title, capacity_raw)
+        return None
+    if watt is None:
+        return None
+    return NamedWatt(name=title, watt=watt)
+
+
 def parse_power_flow(data: object) -> PowerFlow:
     """Parse the /data/electricflow/111/update JSON payload into a PowerFlow."""
     if not isinstance(data, dict):
@@ -104,21 +142,20 @@ def parse_power_flow(data: object) -> PowerFlow:
             charging={0: True, 1: False}.get(data.get("charge")),
         )
 
-    # Generation sources (g_d_1..3): keep only labelled entries with a real reading.
+    # Generation sources (g_d_1..3): keep only labelled entries with a real reading. A single wild
+    # auxiliary value must not sink the whole reading, so each entry is tolerant (see _named_watt).
     generation_detail = [
-        NamedWatt(name=title, watt=watt)
+        nw
         for i in (1, 2, 3)
-        if (title := str(data.get(f"g_d_{i}_title") or "").strip())
-        and (watt := normalize_number(data.get(f"g_d_{i}_capacity"))) is not None
+        if (nw := _named_watt(data.get(f"g_d_{i}_title"), data.get(f"g_d_{i}_capacity"))) is not None
     ]
 
     # Top consumers (u_d_1..3), each gated by its best{i} visibility flag (matches the UI).
     top_consumers = [
-        NamedWatt(name=title, watt=watt)
+        nw
         for i in (1, 2, 3)
         if data.get(f"best{i}") == 1
-        and (title := str(data.get(f"u_d_{i}_title") or "").strip())
-        and (watt := normalize_number(data.get(f"u_d_{i}_capacity"))) is not None
+        and (nw := _named_watt(data.get(f"u_d_{i}_title"), data.get(f"u_d_{i}_capacity"))) is not None
     ]
 
     return PowerFlow(
@@ -303,18 +340,38 @@ STANDARD_METRICS: dict[str, str] = {
 _INVALID_COLUMN_RE = re.compile(r"^無効\d+$")
 
 
+def _fold_header(name: str) -> str:
+    """NFKC-fold a header for metric matching: full-width parens/letters/digits -> ASCII, stripped.
+
+    Used only to look up the English key and to detect 無効N; the column keeps the device's own
+    spelling as its display name (so circuit names stay consistent with list_circuits / 1113).
+    """
+    return unicodedata.normalize("NFKC", str(name)).strip()
+
+
+# STANDARD_METRICS keyed by their folded form, so a full-width paren spelling still maps.
+_STANDARD_BY_FOLD = {_fold_header(k): v for k, v in STANDARD_METRICS.items()}
+
+
 @dataclass
 class HistoryColumn:
-    """One selectable CSV column: its position, display name, and English key (None if not fixed)."""
+    """One selectable CSV column: its position, display name, English key, and duplicate rank.
+
+    ``name`` is the base (normalized) header used for circuit/metric filter matching; ``occurrence``
+    disambiguates repeated headers (the device reuses names like 電子レンジ×3, ＬＤ×2).
+    """
 
     index: int
     name: str
     key: str | None
+    occurrence: int = 1
 
     @property
     def label(self) -> str:
-        """The series label to surface: the English key when the column is a fixed metric."""
-        return self.key or self.name
+        """The unique series label: the English key, else the name (with a #N suffix for repeats)."""
+        if self.key:
+            return self.key
+        return self.name if self.occurrence == 1 else f"{self.name}#{self.occurrence}"
 
 
 @dataclass
@@ -336,11 +393,21 @@ def parse_history_csv(raw: bytes) -> HistoryCsv:
         header = next(reader)
     except StopIteration:
         raise ValueError("history CSV is empty") from None
-    columns = [
-        HistoryColumn(index=idx, name=name, key=STANDARD_METRICS.get(name))
-        for idx, name in enumerate(header)
-        if idx != 0 and not _INVALID_COLUMN_RE.match(name)
-    ]
+    columns: list[HistoryColumn] = []
+    seen: dict[str, int] = {}  # display name -> count, to number duplicate headers
+    for idx, raw_name in enumerate(header):
+        if idx == 0:  # 計測日時 (the timestamp column)
+            continue
+        name = str(raw_name).strip()  # keep the device's own spelling as the display name
+        folded = _fold_header(raw_name)  # fold only for metric-key lookup / 無効N detection
+        if _INVALID_COLUMN_RE.match(folded):
+            continue
+        seen[name] = seen.get(name, 0) + 1
+        columns.append(
+            HistoryColumn(
+                index=idx, name=name, key=_STANDARD_BY_FOLD.get(folded), occurrence=seen[name]
+            )
+        )
     data = [row for row in reader if row and row[0].strip()]
     return HistoryCsv(columns=columns, rows=data)
 
@@ -372,6 +439,33 @@ def history_timestamp(raw: str, granularity: str) -> tuple[str, str]:
     if granularity == "year":
         return ts, ts
     raise ValueError(f"unknown granularity: {granularity!r}")
+
+
+# Expected start/end string format per granularity (30min/hour/day share the date form).
+_RANGE_FORMAT = {
+    "30min": (re.compile(r"^\d{4}-\d{2}-\d{2}$"), "YYYY-MM-DD"),
+    "hour": (re.compile(r"^\d{4}-\d{2}-\d{2}$"), "YYYY-MM-DD"),
+    "day": (re.compile(r"^\d{4}-\d{2}-\d{2}$"), "YYYY-MM-DD"),
+    "month": (re.compile(r"^\d{4}-\d{2}$"), "YYYY-MM"),
+    "year": (re.compile(r"^\d{4}$"), "YYYY"),
+}
+
+
+def validate_range(granularity: str, start: str, end: str) -> None:
+    """Raise ValueError unless start/end match the format required for ``granularity``.
+
+    Catches a silent boundary miss (e.g. a YYYY-MM-DD passed to a month query) with a message
+    naming the expected format, instead of quietly returning no rows.
+    """
+    spec = _RANGE_FORMAT.get(granularity)
+    if spec is None:
+        raise ValueError(f"unknown granularity: {granularity!r}")
+    pattern, fmt = spec
+    for field, value in (("start", start), ("end", end)):
+        if not pattern.match(value):
+            raise ValueError(
+                f"{field}={value!r} is not valid; expected format {fmt} for granularity={granularity}"
+            )
 
 
 def _select_columns(

@@ -39,6 +39,39 @@ def test_parse_history_csv_columns_and_bom(read_bytes):
     assert "使用電力量" in by_name  # tail utility meter survives
 
 
+def test_parse_history_csv_disambiguates_duplicate_headers(read_bytes):
+    # The device reuses labels (電子レンジ×3, ＬＤ×2); labels must be unique via #N suffixes.
+    parsed = parsers.parse_history_csv(read_bytes(_sd("dayhistory_rc_202507.csv")))
+    labels = [c.label for c in parsed.columns]
+    assert {"電子レンジ", "電子レンジ#2", "電子レンジ#3"} <= set(labels)
+    assert {"ＬＤ", "ＬＤ#2"} <= set(labels)
+    assert len(labels) == len(set(labels))  # every series label is unique
+
+
+def test_select_columns_circuit_filter_matches_all_duplicates(read_bytes):
+    # circuits=["電子レンジ"] must include every same-named variant (base-name match).
+    parsed = parsers.parse_history_csv(read_bytes(_sd("dayhistory_rc_202507.csv")))
+    selected = parsers._select_columns(parsed.columns, None, ["電子レンジ"])
+    assert [c.label for c in selected] == ["電子レンジ", "電子レンジ#2", "電子レンジ#3"]
+
+
+def test_parse_history_csv_folds_fullwidth_header():
+    # A full-width paren/letter spelling of a standard metric still maps to its English key.
+    raw = ("﻿計測日時,太陽光発電（ＰＶ１）,主幹買電\n20250701,100,200\n").encode("utf-8")
+    parsed = parsers.parse_history_csv(raw)
+    keys = {c.key for c in parsed.columns}
+    assert "generation_pv1" in keys  # （ＰＶ１） NFKC-folded to (PV1)
+    assert "grid_buy" in keys
+
+
+def test_validate_range_accepts_and_rejects():
+    parsers.validate_range("day", "2025-07-01", "2025-07-02")  # no raise
+    parsers.validate_range("month", "2025-06", "2025-07")
+    parsers.validate_range("year", "2024", "2025")
+    with pytest.raises(ValueError, match="expected format YYYY-MM for granularity=month"):
+        parsers.validate_range("month", "2025-06-15", "2025-06")
+
+
 @pytest.mark.parametrize(
     ("raw", "granularity", "display", "key"),
     [
@@ -189,6 +222,17 @@ async def test_store_non_csv_is_ignored(store_and_client, tmp_path):
     cache = tmp_path / "cache"
     assert not (cache / "co2.conf").exists()
     assert (cache / "dayhistory_rc_202507.csv").exists()
+
+
+async def test_store_rejects_wrong_range_format(store_and_client):
+    from mcp.server.fastmcp.exceptions import ToolError
+
+    store, client = store_and_client()
+    with pytest.raises(ToolError, match="expected format YYYY-MM for granularity=month"):
+        await store.get_history(
+            "month", "2025-06-15", "2025-06-20", metrics=None, circuits=None, limit=10, offset=0
+        )
+    assert client.calls == 0  # validation happens before any download
 
 
 async def test_store_out_of_range_raises_with_hint(store_and_client):

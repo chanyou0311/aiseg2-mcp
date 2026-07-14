@@ -1,4 +1,4 @@
-"""Adversarial tests for the tool surface: it must stay exactly the four read-only observations.
+"""Adversarial tests for the tool surface: it must stay exactly the six read-only observations.
 
 The safety property is that this server never mutates the AiSEG2: no write/settings tool may be
 registered, no tool name may hint at mutation, no code path may call the device's /action/
@@ -27,7 +27,7 @@ EXPECTED_TOOLS = {
 PACKAGE = pathlib.Path(__file__).resolve().parent.parent / "aiseg2_mcp"
 
 
-async def test_registered_tools_are_exactly_the_four_read_only_tools():
+async def test_registered_tools_are_exactly_the_six_read_only_tools():
     names = {t.name for t in await mcp.list_tools()}
     assert names == EXPECTED_TOOLS
 

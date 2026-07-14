@@ -122,6 +122,66 @@ async def test_circuit_paging_stops_at_repeated_page(fixtures_dir):
     assert len(pages) == 4
 
 
+async def test_unexpected_redirect_raises_tool_error():
+    from mcp.server.fastmcp.exceptions import ToolError
+
+    calls = {"n": 0}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls["n"] += 1
+        return httpx.Response(302, headers={"location": "/login.html"})
+
+    client = _make_client(handler)
+    with pytest.raises(ToolError, match="redirect"):
+        await client.fetch_power_flow()
+    assert calls["n"] == 1  # a 3xx is not followed and not retried
+
+
+async def test_download_history_uses_csrftoken_from_page(fixtures_dir):
+    html = (fixtures_dir / "exectop2.html").read_text(encoding="utf-8")
+    seen: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request)
+        if "downType" in request.url.params:
+            return httpx.Response(200, content=b"PK\x03\x04-fake-zip")
+        return httpx.Response(200, text=html)
+
+    client = _make_client(handler)
+    data = await client.download_history_zip(timeout=1.0)
+    assert data == b"PK\x03\x04-fake-zip"
+    download = next(r for r in seen if "downType" in r.url.params)
+    assert download.url.params["csrftoken"] == "99999"  # extracted from the fixture via lxml
+
+
+async def test_download_history_accepts_non_numeric_token():
+    # The token is not always numeric; lxml extraction + a [^"]+ fallback must accept it.
+    html = '<html><body><input type="hidden" NAME="csrftoken" VALUE="ab12-XY" /></body></html>'
+    seen: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request)
+        if "downType" in request.url.params:
+            return httpx.Response(200, content=b"zip")
+        return httpx.Response(200, text=html)
+
+    client = _make_client(handler)
+    await client.download_history_zip(timeout=1.0)
+    download = next(r for r in seen if "downType" in r.url.params)
+    assert download.url.params["csrftoken"] == "ab12-XY"
+
+
+async def test_download_history_missing_token_raises():
+    from mcp.server.fastmcp.exceptions import ToolError
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, text="<html><body>no token here</body></html>")
+
+    client = _make_client(handler)
+    with pytest.raises(ToolError, match="csrftoken"):
+        await client.download_history_zip(timeout=1.0)
+
+
 async def test_concurrency_semaphore_limits_in_flight():
     active = {"now": 0, "max": 0}
 
