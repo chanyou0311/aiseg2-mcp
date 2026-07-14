@@ -1,0 +1,19 @@
+name: Test
+
+# Runs the test suite (parser regressions + read-only tool-surface guards) on every push and PR.
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v5
+      - name: Sync deps (locked)
+        run: uv sync --locked
+      - name: Run tests
+        run: uv run pytest -q

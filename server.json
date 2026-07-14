@@ -1,0 +1,56 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-07-09/server.schema.json",
+  "name": "io.github.chanyou0311/aiseg2-mcp",
+  "description": "Unofficial read-only MCP server for the Panasonic AiSEG2 HEMS controller.",
+  "version": "0.0.0",
+  "repository": {
+    "url": "https://github.com/chanyou0311/aiseg2-mcp",
+    "source": "github"
+  },
+  "packages": [
+    {
+      "registryType": "pypi",
+      "registryBaseUrl": "https://pypi.org",
+      "identifier": "aiseg2-mcp",
+      "version": "0.0.0",
+      "transport": {
+        "type": "stdio"
+      },
+      "environmentVariables": [
+        {
+          "name": "AISEG_URL",
+          "description": "AiSEG2 base URL, e.g. http://192.168.0.216 (http only).",
+          "isRequired": true
+        },
+        {
+          "name": "AISEG_PASSWORD",
+          "description": "HTTP Digest password for the AiSEG2 web UI.",
+          "isRequired": true,
+          "isSecret": true
+        }
+      ]
+    },
+    {
+      "registryType": "oci",
+      "registryBaseUrl": "https://ghcr.io",
+      "identifier": "ghcr.io/chanyou0311/aiseg2-mcp",
+      "version": "0.0.0",
+      "transport": {
+        "type": "stdio"
+      },
+      "environmentVariables": [
+        {
+          "name": "AISEG_URL",
+          "description": "AiSEG2 base URL, e.g. http://192.168.0.216 (http only).",
+          "isRequired": true
+        },
+        {
+          "name": "AISEG_PASSWORD",
+          "description": "HTTP Digest password for the AiSEG2 web UI.",
+          "isRequired": true,
+          "isSecret": true
+        }
+      ]
+    }
+  ]
+}
