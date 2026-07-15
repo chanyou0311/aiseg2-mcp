@@ -20,7 +20,7 @@ jobs:
       - uses: actions/checkout@v4
       - name: Stamp version into server.json
         run: |
-          jq --arg v "${{ inputs.version }}" '.version = $v | .packages |= map(.version = $v | if .registryType == "oci" then .identifier |= (split(":")[0] + ":" + $v) else . end)' server.json > server.json.tmp
+          jq --arg v "${{ inputs.version }}" '.version = $v | .packages |= map(if .registryType == "oci" then (.identifier |= (split(":")[0] + ":" + $v)) | del(.version) else .version = $v end)' server.json > server.json.tmp
           mv server.json.tmp server.json
       - name: Install mcp-publisher
         run: |

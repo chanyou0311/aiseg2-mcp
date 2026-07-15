@@ -33,7 +33,6 @@
     {
       "registryType": "oci",
       "identifier": "ghcr.io/chanyou0311/aiseg2-mcp:0.0.0",
-      "version": "0.0.0",
       "transport": {
         "type": "stdio"
       },
