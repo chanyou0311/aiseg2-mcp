@@ -136,7 +136,7 @@ jobs:
       - name: Stamp version into server.json
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
-          jq --arg v "$VERSION" '.version = $v | .packages |= map(.version = $v)' server.json > server.json.tmp
+          jq --arg v "$VERSION" '.version = $v | .packages |= map(.version = $v | if .registryType == "oci" then .identifier |= (split(":")[0] + ":" + $v) else . end)' server.json > server.json.tmp
           mv server.json.tmp server.json
       - name: Install mcp-publisher
         run: |
