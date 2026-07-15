@@ -1,0 +1,33 @@
+name: Publish to MCP Registry
+
+# Manual re-publish path for the MCP registry entry. Normally the registry is published by
+# release.yml on tag push; this dispatch exists to retry a failed registry publish for an
+# already-released version without re-tagging (PyPI/GHCR are immutable per version).
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Released version to publish (e.g. 0.1.0). Must already exist on PyPI/GHCR.'
+        required: true
+
+jobs:
+  publish-mcp-registry:
+    runs-on: ubuntu-24.04
+    permissions:
+      id-token: write  # GitHub OIDC login to the MCP registry
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: Stamp version into server.json
+        run: |
+          jq --arg v "${{ inputs.version }}" '.version = $v | .packages |= map(.version = $v)' server.json > server.json.tmp
+          mv server.json.tmp server.json
+      - name: Install mcp-publisher
+        run: |
+          # Asset names carry no version segment (verified against v1.8.0 release assets).
+          curl -sSL "https://github.com/modelcontextprotocol/registry/releases/latest/download/mcp-publisher_linux_amd64.tar.gz" \
+            | tar xz mcp-publisher
+      - name: Login (GitHub OIDC)
+        run: ./mcp-publisher login github-oidc
+      - name: Publish to MCP registry
+        run: ./mcp-publisher publish

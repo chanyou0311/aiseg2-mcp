@@ -140,9 +140,8 @@ jobs:
           mv server.json.tmp server.json
       - name: Install mcp-publisher
         run: |
-          TAG=$(curl -sSL https://api.github.com/repos/modelcontextprotocol/registry/releases/latest | jq -r .tag_name)
-          VER="${TAG#v}"
-          curl -sSL "https://github.com/modelcontextprotocol/registry/releases/download/${TAG}/mcp-publisher_${VER}_linux_amd64.tar.gz" \
+          # Asset names carry no version segment (verified against v1.8.0 release assets).
+          curl -sSL "https://github.com/modelcontextprotocol/registry/releases/latest/download/mcp-publisher_linux_amd64.tar.gz" \
             | tar xz mcp-publisher
       - name: Login (GitHub OIDC)
         run: ./mcp-publisher login github-oidc
