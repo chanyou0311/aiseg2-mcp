@@ -120,6 +120,9 @@ metadata:
   name: mcp-auth-aiseg2
 spec:
   replicas: 1
+  # RWO volume: the old pod must release it before the new one starts.
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       app: mcp-auth-aiseg2
@@ -148,6 +151,14 @@ spec:
             - "chanyou0311"
             # Upstream = the cluster-internal MCP Service (path-preserving: external /mcp -> :8000/mcp).
             - "http://aiseg2-mcp:8000"
+          # /data (BoltDB `db` + `private_key.pem` + `secret`) holds every dynamically-registered
+          # OAuth client and the token-signing key, so it MUST be on a PVC. In the container write
+          # layer any pod restart drops it, and an already-configured connector then keeps presenting
+          # its now-unknown client_id: /.idp/auth answers `invalid_client` forever, recoverable only
+          # by re-adding the connector by hand.
+          volumeMounts:
+            - name: data
+              mountPath: /data
           env:
             - name: GITHUB_CLIENT_ID
               valueFrom:
@@ -172,6 +183,27 @@ spec:
               memory: "32Mi"
             limits:
               memory: "64Mi"
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: mcp-auth-aiseg2-data
+---
+# OAuth state (registered clients + signing key). Tiny — 1Gi is the practical floor for longhorn.
+# Delete=false: the ArgoCD Application syncs with prune: true and longhorn reclaims with Delete, so
+# without this a manifest rename/removal would take the volume — and the registrations — with it.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: mcp-auth-aiseg2-data
+  annotations:
+    argocd.argoproj.io/sync-options: Delete=false
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: longhorn
+  resources:
+    requests:
+      storage: 1Gi
 ---
 apiVersion: v1
 kind: Service
