@@ -7,7 +7,8 @@ resources:
 # auth-proxy GitHub OAuth creds (mcp-auth-aiseg2-github-oauth) live on the platform side (P/mcp/),
 # consumer-side of a chart there — not here.
 # Registry only moves to ghcr.io here; the tag is carried over as-is from the old registry.fumo.jp
-# reference. No digest yet — the build workflow pins tag+digest on its first run against this branch.
+# reference. The digest is pinned by the build workflow's write-back once CI has run against this
+# branch (empty until then).
 images:
   - name: ghcr.io/chanyou0311/aiseg2-mcp
     newTag: "7079361"

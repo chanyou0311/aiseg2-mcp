@@ -59,10 +59,12 @@ jobs:
           platforms: linux/amd64
           push: true
           tags: ${{ steps.meta.outputs.tags }}
-          # aiseg2-mcp is already a public GHCR package (PyPI/MCP Registry distribution); keep the
-          # build cache off that public-facing ref by using a dedicated -buildcache package.
-          cache-from: type=registry,ref=ghcr.io/chanyou0311/aiseg2-mcp-buildcache:cache
-          cache-to: type=registry,ref=ghcr.io/chanyou0311/aiseg2-mcp-buildcache:cache,mode=max
+          # Follows the conventions-sheet §3.1 default (ghcr.io/chanyou0311/<name>:buildcache) used
+          # by the other repos (e.g. fumo-op-mcp), rather than a dedicated -buildcache package: a
+          # standalone package's first-push auto-creation and resulting visibility are unverified and
+          # would risk failing the very first CI run on this package.
+          cache-from: type=registry,ref=${{ env.IMAGE }}:buildcache
+          cache-to: type=registry,ref=${{ env.IMAGE }}:buildcache,mode=max
 
       - name: Set up kustomize
         uses: imranismail/setup-kustomize@v2
