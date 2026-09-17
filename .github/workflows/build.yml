@@ -1,26 +1,34 @@
 name: Build and Push
 
-# Builds the MCP server image and pushes it to the Zot registry (fumo homelab delivery). ArgoCD
-# Image Updater then detects the new 7-hex SHA tag and writes it back to the k8s overlay. This is
-# independent of test.yml / release.yml (PyPI + GHCR public distribution). Excludes k8s/** on
-# purpose: Image Updater writes the new tag into k8s/overlays/production/.argocd-source-*.yaml, so
-# triggering on it would loop forever (writeback -> build -> new tag -> writeback -> ...).
+# Builds the MCP server image and pushes it to GHCR (fumo homelab delivery). This job also pins the
+# resulting tag+digest into k8s/overlays/production/kustomization.yaml (image-updater is retired; CI
+# does the write-back). Independent of test.yml / release.yml (PyPI + public GHCR distribution).
+# Excludes k8s/** on purpose: the digest-pin commit lands under k8s/, so triggering on it would loop
+# forever (writeback -> build -> new tag -> writeback -> ...).
 
 on:
   push:
-    branches: [main]
-    paths:
-      - 'aiseg2_mcp/**'
-      - 'pyproject.toml'
-      - 'uv.lock'
-      - 'Dockerfile'
-      - '.github/workflows/build.yml'
+    branches: [main, add-white-server-to-fumo-k3s] # TODO(段4): rebuild ブランチを外す
+    paths-ignore:
+      - 'k8s/**'
+      - '*.md'
   workflow_dispatch: {}
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  IMAGE: ghcr.io/chanyou0311/aiseg2-mcp
+  OVERLAY: k8s/overlays/production
 
 jobs:
   build:
-    # GitHub-hosted arm64 native runner (no QEMU); the k3s cluster is all arm64.
-    runs-on: ubuntu-24.04-arm
+    runs-on: arc-runner-aiseg2-mcp
+    permissions:
+      contents: write
+      packages: write
+      pull-requests: write
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -28,26 +36,58 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Get image tag
-        id: tag
-        run: echo "tag=$(echo $GITHUB_SHA | cut -c1-7)" >> "$GITHUB_OUTPUT"
-
-      - name: Login to Zot registry
+      - name: Login to GHCR
         uses: docker/login-action@v3
         with:
-          registry: registry.fumo.jp
-          username: ${{ secrets.ZOT_USERNAME }}
-          password: ${{ secrets.ZOT_PASSWORD }}
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Docker metadata (tags)
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.IMAGE }}
+          tags: type=sha,prefix=sha-,format=short
 
       - name: Build and Push Docker image
+        id: build
         uses: docker/build-push-action@v6
         with:
           context: .
           file: Dockerfile
-          platforms: linux/arm64
+          platforms: linux/amd64
           push: true
-          tags: registry.fumo.jp/aiseg2-mcp:${{ steps.tag.outputs.tag }}
-          # type=gha lives in the same datacenter as the hosted runner; caches the slow uv sync
-          # dependency layer (the ephemeral runner throws away the Dockerfile --mount cache).
-          cache-from: type=gha,scope=aiseg2-mcp-deps
-          cache-to: type=gha,scope=aiseg2-mcp-deps,mode=max
+          tags: ${{ steps.meta.outputs.tags }}
+          cache-from: type=registry,ref=${{ env.IMAGE }}:buildcache
+          cache-to: type=registry,ref=${{ env.IMAGE }}:buildcache,mode=max
+
+      - name: Set up kustomize
+        uses: imranismail/setup-kustomize@v2
+
+      - name: Pin digest into the overlay
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          set -euo pipefail
+          tag="sha-${GITHUB_SHA::7}"
+          (cd "$OVERLAY" && kustomize edit set image "$IMAGE=$IMAGE:$tag@$DIGEST")
+          if git diff --quiet -- "$OVERLAY"; then
+            echo "no manifest change; skipping write-back"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add "$OVERLAY"
+          git commit -m "chore(k8s): pin aiseg2-mcp to ${tag}"
+          if [ "${GITHUB_REF_NAME}" = "main" ]; then
+            branch="bump/aiseg2-mcp-${tag}"
+            git checkout -b "$branch"
+            git push origin "$branch"
+            gh pr create --base main --head "$branch" \
+              --title "chore(k8s): pin aiseg2-mcp to ${tag}" \
+              --body "Automated digest pin from ${GITHUB_SHA}."
+          else
+            git push origin "HEAD:${GITHUB_REF_NAME}"
+          fi
