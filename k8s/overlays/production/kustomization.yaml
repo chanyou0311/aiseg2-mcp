@@ -1,7 +1,16 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 resources:
-  - ../../base
-# No Secret manifest here: both secrets (mcp-aiseg2-credential, mcp-github-oauth-aiseg2-eso) are
-# delivered by External Secrets Operator from 1Password, declared on the fumo-k8s-platform side.
-# The image tag is managed by ArgoCD Image Updater (git write-back to .argocd-source-aiseg2-mcp.yaml).
+- ../../base
+- mcp-aiseg2-credential-externalsecret.yaml
+# mcp-aiseg2-credential-externalsecret.yaml delivers the AiSEG2 password from 1Password via ESO. The
+# auth-proxy GitHub OAuth creds (mcp-auth-aiseg2-github-oauth) live on the platform side (P/mcp/),
+# consumer-side of a chart there — not here.
+# Registry only moves to ghcr.io here; the tag is carried over as-is from the old registry.fumo.jp
+# reference. The digest is pinned by the build workflow's write-back once CI has run against this
+# branch (empty until then).
+images:
+- digest: sha256:d751c5eac2f35f43b1e8168c4e47d12d688e522a827336f45c9c72a7473150a2
+  name: ghcr.io/chanyou0311/aiseg2-mcp
+  newName: ghcr.io/chanyou0311/aiseg2-mcp
+  newTag: sha-151d9ac

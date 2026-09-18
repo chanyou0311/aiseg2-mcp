@@ -1,12 +1,12 @@
-# Panasonic AiSEG2 (HEMS) MCP server (FastMCP streamable-http) + mcp-auth-proxy (GitHub OAuth).
+# Panasonic AiSEG2 (HEMS) MCP server (FastMCP streamable-http).
 #
-# Two SEPARATE Deployments (proven mcp-grafana/mcp-vast/mcp-op pattern), NOT a sidecar: the
-# auth-proxy pod stays up across MCP-image updates, so its ephemeral OAuth state survives the
-# Image-Updater redeploys that restart only the MCP pod — no claude.ai re-auth churn. The raw MCP
-# Service is ClusterIP-only; only the authenticated proxy is exposed via the Ingress.
+# mcp-auth-aiseg2 (GitHub OAuth front door) lives in fumo-k8s-platform (P/mcp/), not here — it fronts
+# this Service over the cluster network so its ephemeral OAuth state (PVC) survives an MCP-image
+# redeploy without a claude.ai re-auth. The raw MCP Service is ClusterIP-only; only the platform-side
+# proxy is exposed via Ingress.
 #
-# Secrets: BOTH are delivered by External Secrets Operator from 1Password (declared on the platform
-# side, not here) — this repo carries no Secret manifest.
+# Secrets: the AiSEG2 password (mcp-aiseg2-credential) is delivered by ESO from this repo's own
+# overlay (k8s/overlays/production/); the auth-proxy's GitHub OAuth creds live on the platform side.
 ---
 # The MCP server. Scrapes the AiSEG2's LAN web UI (http Digest) and exposes read-only tools.
 # Cluster-internal only (:8000). DNS-rebinding protection is disabled because the server sits behind
@@ -35,9 +35,10 @@ spec:
           type: RuntimeDefault
       containers:
         - name: mcp
-          # Initial tag is a placeholder; the first CI build pushes a 7-hex SHA tag and ArgoCD Image
-          # Updater bumps it (until then the pod is ImagePullBackOff — expected for a new repo).
-          image: registry.fumo.jp/aiseg2-mcp:0000000
+          # Initial tag is a placeholder; the first CI build pushes a 7-hex SHA tag and the digest is
+          # pinned in k8s/overlays/production/kustomization.yaml (until then the pod is
+          # ImagePullBackOff — expected for a new repo).
+          image: ghcr.io/chanyou0311/aiseg2-mcp:0000000
           securityContext:
             allowPrivilegeEscalation: false
             capabilities:
@@ -106,143 +107,3 @@ spec:
     - port: 8000
       targetPort: 8000
       name: mcp
----
-# mcp-auth-aiseg2: GitHub-OAuth gateway in front of the MCP server. Publishes the OAuth 2.1
-# authorization-server + protected-resource metadata and /.idp/* endpoints at ROOT, and proxies
-# /mcp to the upstream MCP Service. Ephemeral (no PVC): a restart forces a one-time claude.ai
-# re-auth, acceptable for a single-user homelab (matches the sibling MCP proxies).
-#
-# No pod securityContext (unlike the hardened MCP pod above): the sigbit image owns its WORKDIR for
-# the ephemeral OAuth/BoltDB data dir.
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: mcp-auth-aiseg2
-spec:
-  replicas: 1
-  # RWO volume: the old pod must release it before the new one starts.
-  strategy:
-    type: Recreate
-  selector:
-    matchLabels:
-      app: mcp-auth-aiseg2
-  template:
-    metadata:
-      labels:
-        app: mcp-auth-aiseg2
-    spec:
-      priorityClassName: app-core
-      containers:
-        - name: mcp-auth-proxy
-          # v2.6.1 fixes the "client omits OAuth state" bug (#126) that some MCP clients hit — pin it.
-          image: ghcr.io/sigbit/mcp-auth-proxy:v2.6.1
-          args:
-            - "--external-url"
-            - "https://mcp-aiseg2.fumo.jp"
-            - "--listen"
-            - ":8080"
-            # TLS is terminated by Traefik + cert-manager; disable the proxy's own Let's Encrypt.
-            - "--no-auto-tls"
-            - "--github-client-id"
-            - "$(GITHUB_CLIENT_ID)"
-            - "--github-client-secret"
-            - "$(GITHUB_CLIENT_SECRET)"
-            - "--github-allowed-users"
-            - "chanyou0311"
-            # Upstream = the cluster-internal MCP Service (path-preserving: external /mcp -> :8000/mcp).
-            - "http://aiseg2-mcp:8000"
-          # /data (BoltDB `db` + `private_key.pem` + `secret`) holds every dynamically-registered
-          # OAuth client and the token-signing key, so it MUST be on a PVC. In the container write
-          # layer any pod restart drops it, and an already-configured connector then keeps presenting
-          # its now-unknown client_id: /.idp/auth answers `invalid_client` forever, recoverable only
-          # by re-adding the connector by hand.
-          volumeMounts:
-            - name: data
-              mountPath: /data
-          env:
-            - name: GITHUB_CLIENT_ID
-              valueFrom:
-                secretKeyRef:
-                  name: mcp-github-oauth-aiseg2-eso
-                  key: client-id
-            - name: GITHUB_CLIENT_SECRET
-              valueFrom:
-                secretKeyRef:
-                  name: mcp-github-oauth-aiseg2-eso
-                  key: client-secret
-          ports:
-            - containerPort: 8080
-              name: http
-          readinessProbe:
-            tcpSocket:
-              port: 8080
-            initialDelaySeconds: 5
-            periodSeconds: 10
-          resources:
-            requests:
-              memory: "32Mi"
-            limits:
-              memory: "64Mi"
-      volumes:
-        - name: data
-          persistentVolumeClaim:
-            claimName: mcp-auth-aiseg2-data
----
-# OAuth state (registered clients + signing key). Tiny — 1Gi is the practical floor for longhorn.
-# Delete=false: the ArgoCD Application syncs with prune: true and longhorn reclaims with Delete, so
-# without this a manifest rename/removal would take the volume — and the registrations — with it.
-apiVersion: v1
-kind: PersistentVolumeClaim
-metadata:
-  name: mcp-auth-aiseg2-data
-  annotations:
-    argocd.argoproj.io/sync-options: Delete=false
-spec:
-  accessModes:
-    - ReadWriteOnce
-  storageClassName: longhorn
-  resources:
-    requests:
-      storage: 1Gi
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: mcp-auth-aiseg2
-spec:
-  selector:
-    app: mcp-auth-aiseg2
-  ports:
-    - port: 8080
-      targetPort: 8080
-      name: http
----
-# Public entry: TLS via cert-manager (fumo-issuer), DNS via external-dns through the shared
-# Cloudflare tunnel (same target as the other fumo.jp services). MUST route the host at path "/"
-# (PathPrefix), NOT just /mcp: the proxy serves OAuth metadata (/.well-known/*) and /.idp/* at ROOT
-# — routing only /mcp would break the OAuth handshake (authorize/token/jwks/register live at root).
-apiVersion: networking.k8s.io/v1
-kind: Ingress
-metadata:
-  name: aiseg2-mcp
-  annotations:
-    cert-manager.io/cluster-issuer: fumo-issuer
-    external-dns.alpha.kubernetes.io/target: 40244daf-cc85-4c0a-adcd-fd3e66d3c632.cfargotunnel.com
-    external-dns.alpha.kubernetes.io/cloudflare-proxied: "true"
-spec:
-  ingressClassName: traefik
-  rules:
-    - host: mcp-aiseg2.fumo.jp
-      http:
-        paths:
-          - path: /
-            pathType: Prefix
-            backend:
-              service:
-                name: mcp-auth-aiseg2
-                port:
-                  number: 8080
-  tls:
-    - hosts:
-        - mcp-aiseg2.fumo.jp
-      secretName: mcp-aiseg2-tls
