@@ -8,11 +8,16 @@ name: Build and Push
 
 on:
   push:
-    branches: [main, add-white-server-to-fumo-k3s] # TODO(段4): rebuild ブランチを外す
+    branches: [main]
     paths-ignore:
       - 'k8s/**'
       - '*.md'
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      no_cache:
+        description: ビルドキャッシュを使わずに作り直す (キャッシュが壊れた疑いがあるとき)
+        type: boolean
+        default: false
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -59,6 +64,7 @@ jobs:
           platforms: linux/amd64
           push: true
           tags: ${{ steps.meta.outputs.tags }}
+          no-cache: ${{ inputs.no_cache == true }}
           # Follows the conventions-sheet §3.1 default (ghcr.io/chanyou0311/<name>:buildcache) used
           # by the other repos (e.g. fumo-op-mcp), rather than a dedicated -buildcache package: a
           # standalone package's first-push auto-creation and resulting visibility are unverified and
