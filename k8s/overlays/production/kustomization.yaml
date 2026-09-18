@@ -10,7 +10,7 @@ resources:
 # reference. The digest is pinned by the build workflow's write-back once CI has run against this
 # branch (empty until then).
 images:
-- digest: sha256:fe1ddfc5df6a38bf5215c974c7dd0fbcedea2ecee220ba40507c51481facbe41
+- digest: sha256:d751c5eac2f35f43b1e8168c4e47d12d688e522a827336f45c9c72a7473150a2
   name: ghcr.io/chanyou0311/aiseg2-mcp
   newName: ghcr.io/chanyou0311/aiseg2-mcp
-  newTag: sha-3212a9c
+  newTag: sha-151d9ac
