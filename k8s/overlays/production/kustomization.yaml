@@ -1,8 +1,8 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 resources:
-  - ../../base
-  - mcp-aiseg2-credential-externalsecret.yaml
+- ../../base
+- mcp-aiseg2-credential-externalsecret.yaml
 # mcp-aiseg2-credential-externalsecret.yaml delivers the AiSEG2 password from 1Password via ESO. The
 # auth-proxy GitHub OAuth creds (mcp-auth-aiseg2-github-oauth) live on the platform side (P/mcp/),
 # consumer-side of a chart there — not here.
@@ -10,5 +10,7 @@ resources:
 # reference. The digest is pinned by the build workflow's write-back once CI has run against this
 # branch (empty until then).
 images:
-  - name: ghcr.io/chanyou0311/aiseg2-mcp
-    newTag: "7079361"
+- digest: sha256:fe1ddfc5df6a38bf5215c974c7dd0fbcedea2ecee220ba40507c51481facbe41
+  name: ghcr.io/chanyou0311/aiseg2-mcp
+  newName: ghcr.io/chanyou0311/aiseg2-mcp
+  newTag: sha-3212a9c
