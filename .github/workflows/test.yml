@@ -6,7 +6,8 @@ name: Test
 # fork-authored code and this repo's fork-PR-contributor-approval policy is the default
 # first_time_contributors (only a contributor's *first* fork PR needs manual approval; later ones
 # run unattended). The self-hosted arc-runner-aiseg2-mcp scale set shares white's single node with
-# dind and the ESO-delivered secrets (fumo-k8s-platform §4.2, PSA privileged in ns arc-runners), so
+# dind and the ESO-delivered secrets (see fumo-infra for the ARC runner setup; PSA privileged in ns
+# arc-runners), so
 # `pull_request` stays on the GitHub-hosted runner and only `push` (maintainer-authored history) uses
 # the self-hosted runner. See chanyou0311/aidlc-workspace#495 for the open follow-up (raising the
 # fork-PR approval policy to "all external contributors" is tracked as human/prod work, not fixed

@@ -86,6 +86,23 @@ AISEG_URL=http://192.168.0.216 AISEG_PASSWORD=... uv run aiseg2-mcp
 AiSEG2 を LAN 内に置いたまま claude.ai から接続するには、[`examples/remote/`](./examples/remote/)
 を参照してください（MCP + GitHub OAuth プロキシ + Cloudflare Tunnel の Docker Compose 構成）。
 
+## イメージの動かし方
+
+本リポジトリの仕事は GHCR へのイメージ push までで完結します。実際にどこでどう動かすか
+（Kubernetes マニフェスト等）は別リポジトリの管轄です（メンテナ自身の本番環境では
+[fumo-infra](https://github.com/chanyou0311/fumo-infra)）。以下は他システムが本イメージを動かす
+際に頼ってよい契約です。
+
+| | |
+|---|---|
+| イメージとタグ | `ghcr.io/chanyou0311/aiseg2-mcp:sha-<7hex>` を `main` への push ごとに push。`vX.Y.Z` の release タグでは追加で `X.Y.Z` / `X.Y` / `latest` も push |
+| 待ち受け | `8000/tcp` — streamable-http の MCP エンドポイント `/mcp` |
+| 正常性の口 | liveness: `GET /health`、readiness: ポート `8000` への TCP 接続 |
+| 必須の環境変数 | `AISEG_URL`、`AISEG_PASSWORD`（秘密） |
+| 任意の環境変数（既定値） | `AISEG_USER`（`aiseg`）、`AISEG_TRANSPORT`（`streamable-http` — イメージの `ENV` で設定。パッケージ自体の既定値は `stdio`）、`AISEG_HOST`（`0.0.0.0`）、`AISEG_PORT`（`8000`）、`AISEG_DISABLE_DNS_REBINDING_PROTECTION`（`false`）、`AISEG_CACHE_DIR`（`<tempdir>/aiseg2-mcp-cache`）、`AISEG_CACHE_TTL`（`3600`）、`LOG_LEVEL`（`info`） — 詳細は下記[設定](#設定環境変数)参照 |
+
+配備の定義（Kubernetes のマニフェスト）はこのリポジトリには無い。
+
 ## 設定（環境変数）
 
 | 変数 | 必須 | 既定値 | 説明 |

@@ -1,16 +1,14 @@
 name: Build and Push
 
-# Builds the MCP server image and pushes it to GHCR (fumo homelab delivery). This job also pins the
-# resulting tag+digest into k8s/overlays/production/kustomization.yaml (image-updater is retired; CI
-# does the write-back). Independent of test.yml / release.yml (PyPI + public GHCR distribution).
-# Excludes k8s/** on purpose: the digest-pin commit lands under k8s/, so triggering on it would loop
-# forever (writeback -> build -> new tag -> writeback -> ...).
+# Builds the MCP server image and pushes it to GHCR (fumo homelab delivery). Deployment (which
+# manifest, which cluster) lives in fumo-infra; ArgoCD Image Updater there watches this image's
+# `sha-<7hex>` tags and rolls the deployment forward on its own. This workflow's job ends at the
+# push. Independent of test.yml / release.yml (PyPI + public GHCR distribution).
 
 on:
   push:
     branches: [main]
     paths-ignore:
-      - 'k8s/**'
       - '*.md'
   workflow_dispatch:
     inputs:
@@ -25,15 +23,13 @@ concurrency:
 
 env:
   IMAGE: ghcr.io/chanyou0311/aiseg2-mcp
-  OVERLAY: k8s/overlays/production
 
 jobs:
   build:
     runs-on: arc-runner-aiseg2-mcp
     permissions:
-      contents: write
+      contents: read
       packages: write
-      pull-requests: write
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -71,42 +67,3 @@ jobs:
           # would risk failing the very first CI run on this package.
           cache-from: type=registry,ref=${{ env.IMAGE }}:buildcache
           cache-to: type=registry,ref=${{ env.IMAGE }}:buildcache,mode=max
-
-      - name: Set up kustomize
-        uses: imranismail/setup-kustomize@v2
-        with:
-          kustomize-version: '5.8.1'
-
-      - name: Pin digest into the overlay
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          DIGEST: ${{ steps.build.outputs.digest }}
-        run: |
-          set -euo pipefail
-          tag="sha-${GITHUB_SHA::7}"
-          (cd "$OVERLAY" && kustomize edit set image "$IMAGE=$IMAGE:$tag@$DIGEST")
-          if git diff --quiet -- "$OVERLAY"; then
-            echo "no manifest change; skipping write-back"
-            exit 0
-          fi
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add "$OVERLAY"
-          git commit -m "chore(k8s): pin aiseg2-mcp to ${tag}"
-          if [ "${GITHUB_REF_NAME}" = "main" ]; then
-            branch="bump/aiseg2-mcp-${tag}"
-            git checkout -b "$branch"
-            git push origin "$branch"
-            # ARC runner image (ghcr.io/actions/actions-runner) has no gh CLI (GitHub-hosted only),
-            # so call the REST API with curl (bundled in the runner image) instead of `gh pr create`.
-            curl -sf -X POST \
-              -H "Authorization: Bearer ${GH_TOKEN}" \
-              -H "Accept: application/vnd.github+json" \
-              "https://api.github.com/repos/${GITHUB_REPOSITORY}/pulls" \
-              -d "$(jq -n --arg title "chore(k8s): pin aiseg2-mcp to ${tag}" \
-                         --arg head "$branch" \
-                         --arg body "Automated digest pin from ${GITHUB_SHA}." \
-                         '{title: $title, head: $head, base: "main", body: $body}')"
-          else
-            git push origin "HEAD:${GITHUB_REF_NAME}"
-          fi

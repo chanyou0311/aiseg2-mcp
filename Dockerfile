@@ -29,6 +29,7 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 # --- runtime stage ---------------------------------------------------------------------------
 FROM python:3.12-slim-bookworm
 LABEL io.modelcontextprotocol.server.name="io.github.chanyou0311/aiseg2-mcp"
+LABEL org.opencontainers.image.source="https://github.com/chanyou0311/aiseg2-mcp"
 WORKDIR /app
 COPY --from=build /app/.venv /app/.venv
 ENV PATH="/app/.venv/bin:$PATH" \

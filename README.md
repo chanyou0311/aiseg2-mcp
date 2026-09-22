@@ -87,6 +87,23 @@ To reach the server from claude.ai while your AiSEG2 stays on your LAN, see
 [`examples/remote/`](./examples/remote/) — a Docker Compose stack (MCP + GitHub-OAuth proxy +
 Cloudflare Tunnel).
 
+## Running the image
+
+This repo's job ends at pushing the image to GHCR. Where and how it actually runs (Kubernetes
+manifests, etc.) is defined elsewhere — for the maintainer's own deployment, in
+[fumo-infra](https://github.com/chanyou0311/fumo-infra). The table below is the contract another
+system builds against to run this image.
+
+| | |
+|---|---|
+| Image & tags | `ghcr.io/chanyou0311/aiseg2-mcp:sha-<7hex>` on every push to `main`; a `vX.Y.Z` release tag additionally publishes `X.Y.Z`, `X.Y`, and `latest` |
+| Listens on | `8000/tcp` — streamable-http MCP endpoint at `/mcp` |
+| Health checks | liveness: `GET /health`; readiness: TCP connect on port `8000` |
+| Required env | `AISEG_URL`, `AISEG_PASSWORD` (secret) |
+| Optional env (default) | `AISEG_USER` (`aiseg`), `AISEG_TRANSPORT` (`streamable-http` — set as an image-level `ENV`; the package's own default, e.g. when run via `uvx`, is `stdio`), `AISEG_HOST` (`0.0.0.0`), `AISEG_PORT` (`8000`), `AISEG_DISABLE_DNS_REBINDING_PROTECTION` (`false`), `AISEG_CACHE_DIR` (`<tempdir>/aiseg2-mcp-cache`), `AISEG_CACHE_TTL` (`3600`), `LOG_LEVEL` (`info`) — see [Configuration](#configuration-environment-variables) below for details |
+
+There is no deployment definition (Kubernetes manifests) in this repo.
+
 ## Configuration (environment variables)
 
 | Variable | Required | Default | Description |
