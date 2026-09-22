@@ -4,6 +4,10 @@ name: Build and Push
 # manifest, which cluster) lives in fumo-infra; ArgoCD Image Updater there watches this image's
 # `sha-<7hex>` tags and rolls the deployment forward on its own. This workflow's job ends at the
 # push. Independent of test.yml / release.yml (PyPI + public GHCR distribution).
+#
+# fumo-infra's Image Updater picks the tag by newest-build (image created timestamp), so this job
+# only ever runs for main (job-level `if`, since workflow_dispatch can target any branch/commit) and
+# stamps the image's created timestamp to the source commit's time, not the build time.
 
 on:
   push:
@@ -26,6 +30,10 @@ env:
 
 jobs:
   build:
+    # workflow_dispatch can be run from any branch/commit; only ever push from main (see header
+    # comment). A job-level `if` (rather than filtering the trigger) stops the whole job, not just
+    # the push step.
+    if: github.ref_name == 'main'
     runs-on: arc-runner-aiseg2-mcp
     permissions:
       contents: read
@@ -50,6 +58,9 @@ jobs:
         with:
           images: ${{ env.IMAGE }}
           tags: type=sha,prefix=sha-,format=short
+
+      - name: Set SOURCE_DATE_EPOCH (image created timestamp = commit time)
+        run: echo "SOURCE_DATE_EPOCH=$(git log -1 --pretty=%ct)" >> "$GITHUB_ENV"
 
       - name: Build and Push Docker image
         id: build

@@ -95,7 +95,7 @@ AiSEG2 を LAN 内に置いたまま claude.ai から接続するには、[`exam
 
 | | |
 |---|---|
-| イメージとタグ | `ghcr.io/chanyou0311/aiseg2-mcp:sha-<7hex>` を `main` への push ごとに push。`vX.Y.Z` の release タグでは追加で `X.Y.Z` / `X.Y` / `latest` も push |
+| イメージとタグ | `ghcr.io/chanyou0311/aiseg2-mcp:sha-<7hex>` を `main` への push ごとに push（作成日時はビルド時刻でなく元の commit の時刻）。`vX.Y.Z` の release タグでは追加で `X.Y.Z` / `X.Y` / `latest` も push |
 | 待ち受け | `8000/tcp` — streamable-http の MCP エンドポイント `/mcp` |
 | 正常性の口 | liveness: `GET /health`、readiness: ポート `8000` への TCP 接続 |
 | 必須の環境変数 | `AISEG_URL`、`AISEG_PASSWORD`（秘密） |
