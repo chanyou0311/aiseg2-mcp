@@ -96,7 +96,7 @@ system builds against to run this image.
 
 | | |
 |---|---|
-| Image & tags | `ghcr.io/chanyou0311/aiseg2-mcp:sha-<7hex>` on every push to `main`; a `vX.Y.Z` release tag additionally publishes `X.Y.Z`, `X.Y`, and `latest` |
+| Image & tags | `ghcr.io/chanyou0311/aiseg2-mcp:sha-<7hex>` on every push to `main` (created timestamp = the source commit's time, not the build time); a `vX.Y.Z` release tag additionally publishes `X.Y.Z`, `X.Y`, and `latest` |
 | Listens on | `8000/tcp` — streamable-http MCP endpoint at `/mcp` |
 | Health checks | liveness: `GET /health`; readiness: TCP connect on port `8000` |
 | Required env | `AISEG_URL`, `AISEG_PASSWORD` (secret) |
