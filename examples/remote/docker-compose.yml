@@ -5,7 +5,7 @@
 # The MCP server itself carries NO auth; mcp-auth-proxy (GitHub OAuth) is the trust boundary and the
 # only service the tunnel exposes. NEVER expose aiseg2-mcp directly to the internet. Copy
 # .env.example to .env and fill it in. This is a generic version of the maintainer's own fumo k8s
-# setup (see ../../k8s/).
+# setup (deployment manifests live in the fumo-infra repo, not here).
 services:
   aiseg2-mcp:
     image: ghcr.io/chanyou0311/aiseg2-mcp:latest
