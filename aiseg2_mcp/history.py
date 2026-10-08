@@ -22,10 +22,10 @@ import zipfile
 from collections import OrderedDict
 from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import date, timedelta
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 
-from mcp.server.fastmcp.exceptions import ToolError
+from mcp.server.mcpserver.exceptions import ToolError
 
 from . import parsers
 from .client import AisegClient
@@ -141,7 +141,12 @@ def _available_hint(spec: _FileSpec, cache_dir: Path) -> str:
 
 
 def _page(
-    granularity: str, unit: str, points: list[HistorySeriesPoint], limit: int, offset: int
+    granularity: str,
+    unit: str,
+    as_of: datetime,
+    points: list[HistorySeriesPoint],
+    limit: int,
+    offset: int,
 ) -> SeriesPage:
     """Slice a sorted point list into a SeriesPage and compute has_more / next_offset."""
     window = points[offset : offset + limit]
@@ -149,6 +154,7 @@ def _page(
     return SeriesPage(
         granularity=granularity,
         unit=unit,
+        as_of=as_of,
         series=window,
         has_more=has_more,
         total_rows=len(points),
@@ -253,13 +259,18 @@ class HistoryStore:
         offset: int,
     ) -> SeriesPage:
         points = await self._points("history", granularity, start, end, metrics, circuits, 1.0)
-        return _page(granularity, _HISTORY_UNIT, points, limit, offset)
+        return _page(granularity, _HISTORY_UNIT, self._as_of(), points, limit, offset)
 
     async def get_cost_history(
         self, granularity: str, start: str, end: str, limit: int, offset: int
     ) -> SeriesPage:
         points = await self._points("cost", granularity, start, end, None, None, _COST_SCALE)
-        return _page(granularity, _COST_UNIT, points, limit, offset)
+        return _page(granularity, _COST_UNIT, self._as_of(), points, limit, offset)
+
+    def _as_of(self) -> datetime:
+        """When the export now in use was downloaded. Called after ``_ensure_fresh``."""
+        assert self._fetched_at is not None
+        return datetime.fromtimestamp(int(self._fetched_at), UTC)
 
     async def _points(
         self,

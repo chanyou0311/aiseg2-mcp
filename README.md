@@ -24,18 +24,21 @@ a parse error, please open an issue with your model / firmware version.
 
 ## Tools
 
-All tools are **read-only** (annotated `readOnlyHint`, non-destructive). The server only issues
-GETs and the display-only refresh POSTs the web UI itself uses; it never touches settings or any
-`/action/` endpoint.
+All tools are **read-only** (annotated `readOnlyHint`, non-destructive, with a human-readable
+`title`). The server only issues GETs and the display-only refresh POSTs the web UI itself uses; it
+never touches settings or any `/action/` endpoint.
 
-| Tool | Returns |
-|---|---|
-| `get_power_flow` | Instantaneous generation/consumption (kW), buy/sell state, battery status, generation sources, top consuming circuits |
-| `get_circuit_breakdown` | Every measured circuit's instantaneous draw (W), ranked highest first, with the total |
-| `list_circuits` | Registered circuit ids and names (the authoritative naming source) |
-| `get_daily_totals` | Today's cumulative generation / consumption / grid-buy / grid-sell (kWh) |
-| `get_history` | Long-term energy history from the SD-card export (Wh), long-form points. Args: `granularity` (`30min`/`hour`/`day`/`month`/`year`), `start`/`end` (per granularity: `YYYY-MM-DD`, `YYYY-MM`, or `YYYY`), optional `metrics`/`circuits` filters, `limit`/`offset` paging |
-| `get_cost_history` | Long-term energy-cost history from the SD-card export (JPY). Args: `granularity` (`day`/`month`/`year`), `start`/`end`, `limit`/`offset` |
+Every result carries `as_of` (ISO 8601, UTC): when the server read the values from the AiSEG2, or
+for the two history tools, when the SD-card export behind them was downloaded.
+
+| Tool | Title | Returns |
+|---|---|---|
+| `get_power_flow` | Current power flow | Instantaneous generation/consumption (kW), buy/sell state, battery status, generation sources, top consuming circuits |
+| `get_circuit_breakdown` | Current power by circuit | Every measured circuit's instantaneous draw (W), ranked highest first, with the total |
+| `list_circuits` | Registered circuits | Registered circuit ids and names (the authoritative naming source) |
+| `get_daily_totals` | Today's energy totals | Today's cumulative generation / consumption / grid-buy / grid-sell (kWh) |
+| `get_history` | Energy history | Long-term energy history from the SD-card export (Wh), long-form points. Args: `granularity` (`30min`/`hour`/`day`/`month`/`year`), `start`/`end` (per granularity: `YYYY-MM-DD`, `YYYY-MM`, or `YYYY`), optional `metrics`/`circuits` filters, `limit`/`offset` paging |
+| `get_cost_history` | Energy cost history | Long-term energy-cost history from the SD-card export (JPY). Args: `granularity` (`day`/`month`/`year`), `start`/`end`, `limit`/`offset` |
 
 > **The two history tools require an SD card inserted in the AiSEG2** — they read the device's SD-card CSV export. The export is downloaded once and cached (see `AISEG_CACHE_DIR` / `AISEG_CACHE_TTL`), so the first call is slow and later calls are fast.
 
@@ -114,7 +117,7 @@ There is no deployment definition (Kubernetes manifests) in this repo.
 | `AISEG_TRANSPORT` | no | `stdio` | `stdio` or `streamable-http` |
 | `AISEG_HOST` | no | `0.0.0.0` | Bind host (streamable-http only) |
 | `AISEG_PORT` | no | `8000` | Bind port (streamable-http only) |
-| `AISEG_DISABLE_DNS_REBINDING_PROTECTION` | no | `false` | Disable the SDK Host allowlist — **only** behind a trusted auth proxy |
+| `AISEG_DISABLE_DNS_REBINDING_PROTECTION` | no | `false` | Disable the Host allowlist (by default only `localhost` / `127.0.0.1` / `[::1]` Host headers are accepted) — **only** behind a trusted auth proxy |
 | `AISEG_CACHE_DIR` | no | `<tempdir>/aiseg2-mcp-cache` | Where the SD-card history export is cached |
 | `AISEG_CACHE_TTL` | no | `3600` | Seconds to reuse a cached history export before re-downloading |
 | `LOG_LEVEL` | no | `info` | Log level |

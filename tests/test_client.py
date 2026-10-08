@@ -60,7 +60,7 @@ async def test_empty_body_500_is_retried_once_then_succeeds():
 
 
 async def test_persistent_5xx_raises_tool_error_after_max_attempts():
-    from mcp.server.fastmcp.exceptions import ToolError
+    from mcp.server.mcpserver.exceptions import ToolError
 
     def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(503, text="unavailable")
@@ -71,7 +71,7 @@ async def test_persistent_5xx_raises_tool_error_after_max_attempts():
 
 
 async def test_4xx_raises_immediately_without_retry():
-    from mcp.server.fastmcp.exceptions import ToolError
+    from mcp.server.mcpserver.exceptions import ToolError
 
     calls = {"n": 0}
 
@@ -123,7 +123,7 @@ async def test_circuit_paging_stops_at_repeated_page(fixtures_dir):
 
 
 async def test_unexpected_redirect_raises_tool_error():
-    from mcp.server.fastmcp.exceptions import ToolError
+    from mcp.server.mcpserver.exceptions import ToolError
 
     calls = {"n": 0}
 
@@ -172,7 +172,7 @@ async def test_download_history_accepts_non_numeric_token():
 
 
 async def test_download_history_missing_token_raises():
-    from mcp.server.fastmcp.exceptions import ToolError
+    from mcp.server.mcpserver.exceptions import ToolError
 
     def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(200, text="<html><body>no token here</body></html>")

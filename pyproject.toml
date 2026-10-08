@@ -2,9 +2,9 @@
 # Runs as `aiseg2-mcp` (console script) or `python -m aiseg2_mcp`, over stdio by default.
 #
 # Deps rationale:
-#   mcp (official modelcontextprotocol SDK, FastMCP) -> tool surface + stdio / streamable-http
-#     transport. Pin >=1.28,<2: 1.28 is the current stable line; <2 guards the telegraphed v2
-#     breaking changes. This is the official `mcp` package, NOT the third-party `fastmcp` v2.
+#   mcp (official modelcontextprotocol SDK, MCPServer) -> tool surface + stdio / streamable-http
+#     transport. Pin >=2.3,<3: v2 renamed FastMCP to MCPServer; <3 guards the next breaking line.
+#     This is the official `mcp` package, NOT the third-party `fastmcp`.
 #   httpx -> async HTTP + HTTP Digest auth against the AiSEG2 (http only; no HTTPS on the device).
 #   lxml -> parse the AiSEG2 HTML pages (circuit breakdown, installation names, daily graphs).
 #   pydantic / pydantic-settings -> typed return models + typed config from env.
@@ -19,7 +19,7 @@ authors = [{ name = "chanyou0311" }]
 keywords = ["mcp", "aiseg2", "panasonic", "hems", "home-energy"]
 dynamic = ["version"]
 dependencies = [
-    "mcp>=1.28,<2",
+    "mcp>=2.3,<3",
     "httpx>=0.27",
     "lxml>=5",
     "pydantic>=2",

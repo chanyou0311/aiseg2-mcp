@@ -32,7 +32,7 @@ class Settings(BaseSettings):
     aiseg_transport: Literal["stdio", "streamable-http"] = Field(
         default="stdio", alias="AISEG_TRANSPORT"
     )
-    # Bind for streamable-http only (FastMCP defaults to 127.0.0.1 = unreachable from a container).
+    # Bind for streamable-http only (the SDK defaults to 127.0.0.1 = unreachable from a container).
     aiseg_host: str = Field(default="0.0.0.0", alias="AISEG_HOST")
     aiseg_port: int = Field(default=8000, alias="AISEG_PORT")
 

@@ -1,10 +1,12 @@
-"""FastMCP server exposing a Panasonic AiSEG2 HEMS controller, READ-ONLY.
+"""MCP server (official SDK v2 ``MCPServer``) exposing a Panasonic AiSEG2 HEMS controller, READ-ONLY.
 
 Six tools, all read-only: the instantaneous whole-home flow, the per-circuit breakdown, the
 registered circuit names, today's cumulative kWh totals, and the long-term energy / cost history
 from the SD-card export. There is deliberately NO tool that changes any device setting — the client
 only issues GETs and the display-only refresh POSTs the web UI itself uses. Every tool is annotated
-readOnlyHint=True / destructiveHint=False so a caller can see the surface is non-mutating.
+readOnlyHint=True / destructiveHint=False so a caller can see the surface is non-mutating, and
+every result carries ``as_of`` (when the values were read from the device, or for the SD-card
+history when the export was downloaded).
 
 Each tool is wrapped by ``_audited``, which records a structured audit line on success and on
 failure and normalizes a parser ValueError into a ToolError — so every outcome is audited and every
@@ -27,15 +29,15 @@ from __future__ import annotations
 import functools
 import logging
 from collections.abc import Awaitable, Callable
-from typing import Literal, TypeVar
+from typing import Any, Literal, TypeVar
 
-from mcp.server.fastmcp import FastMCP
-from mcp.server.fastmcp.exceptions import ToolError
+from mcp.server.mcpserver import MCPServer
+from mcp.server.mcpserver.exceptions import ToolError
 from mcp.server.transport_security import TransportSecuritySettings
-from mcp.types import ToolAnnotations
+from mcp_types import ToolAnnotations
 
 from . import parsers
-from .client import AisegClient
+from .client import AisegClient, __version__
 from .config import Settings
 from .history import HistoryStore
 from .models import (
@@ -51,11 +53,8 @@ logger = logging.getLogger("aiseg2_mcp")
 # response bodies are NEVER part of a message.
 audit = logging.getLogger("aiseg2_mcp.audit")
 
-mcp = FastMCP(
-    "aiseg2-mcp",
-    stateless_http=True,
-    json_response=True,
-)
+# v2 no longer fills serverInfo.version on its own.
+mcp = MCPServer("aiseg2-mcp", version=__version__)
 
 # Built in main(); the tools read these module globals.
 _aiseg: AisegClient | None = None
@@ -74,14 +73,17 @@ def _store() -> HistoryStore:
     return _history
 
 
-# Shared annotations: every tool is a read-only, non-destructive, idempotent observation of a
-# device on the local network (no open-world/random effects).
-_READ_ONLY = ToolAnnotations(
-    readOnlyHint=True,
-    destructiveHint=False,
-    idempotentHint=True,
-    openWorldHint=False,
-)
+# Every tool is a read-only, non-destructive, idempotent observation of a device on the local
+# network (no open-world/random effects); only the human-readable title differs.
+def _read_only(title: str) -> ToolAnnotations:
+    return ToolAnnotations(
+        title=title,
+        readOnlyHint=True,
+        destructiveHint=False,
+        idempotentHint=True,
+        openWorldHint=False,
+    )
+
 
 _R = TypeVar("_R")
 
@@ -115,7 +117,7 @@ def _audited(
     return decorator
 
 
-@mcp.tool(annotations=_READ_ONLY)
+@mcp.tool(annotations=_read_only("Current power flow"))
 @_audited(
     "get_power_flow",
     lambda f: f"gen_kw={f.generation_kw} con_kw={f.consumption_kw} buy_sell={f.buy_sell}",
@@ -130,7 +132,7 @@ async def get_power_flow() -> PowerFlow:
     return parsers.parse_power_flow(await _client().fetch_power_flow())
 
 
-@mcp.tool(annotations=_READ_ONLY)
+@mcp.tool(annotations=_read_only("Current power by circuit"))
 @_audited(
     "get_circuit_breakdown", lambda b: f"circuits={len(b.circuits)} pages={b.page_count}"
 )
@@ -144,7 +146,7 @@ async def get_circuit_breakdown() -> CircuitBreakdown:
     return parsers.assemble_breakdown(await _client().fetch_circuit_pages())
 
 
-@mcp.tool(annotations=_READ_ONLY)
+@mcp.tool(annotations=_read_only("Registered circuits"))
 @_audited("list_circuits", lambda c: f"count={len(c.circuits)}")
 async def list_circuits() -> CircuitList:
     """Read-only. List the registered measurement circuits with their stable ids and names.
@@ -156,7 +158,7 @@ async def list_circuits() -> CircuitList:
     return CircuitList(circuits=parsers.parse_installation_circuits(await _client().fetch_installation_html()))
 
 
-@mcp.tool(annotations=_READ_ONLY)
+@mcp.tool(annotations=_read_only("Today's energy totals"))
 @_audited("get_daily_totals", lambda t: f"date={t.date}")
 async def get_daily_totals() -> DailyTotals:
     """Read-only. Get today's cumulative energy totals (kWh) as of the AiSEG2's current day.
@@ -167,7 +169,7 @@ async def get_daily_totals() -> DailyTotals:
     return await _client().fetch_daily_totals()
 
 
-@mcp.tool(annotations=_READ_ONLY)
+@mcp.tool(annotations=_read_only("Energy history"))
 @_audited(
     "get_history",
     lambda p: f"granularity={p.granularity} points={len(p.series)} total={p.total_rows}",
@@ -202,7 +204,7 @@ async def get_history(
     return await _store().get_history(granularity, start, end, metrics, circuits, limit, offset)
 
 
-@mcp.tool(annotations=_READ_ONLY)
+@mcp.tool(annotations=_read_only("Energy cost history"))
 @_audited(
     "get_cost_history",
     lambda p: f"granularity={p.granularity} points={len(p.series)} total={p.total_rows}",
@@ -229,19 +231,34 @@ async def get_cost_history(
     return await _store().get_cost_history(granularity, start, end, limit, offset)
 
 
-def _configure_streamable_http(settings: Settings) -> None:
-    """Apply streamable-http settings to ``mcp`` before run(): bind address + DNS-rebinding toggle.
+# SDK v1 enabled this localhost-only allowlist at construction and kept it after the bind moved;
+# v2 decides at run() from the bind host, so pin the v1 behaviour explicitly.
+_LOCALHOST_ONLY = TransportSecuritySettings(
+    enable_dns_rebinding_protection=True,
+    allowed_hosts=["127.0.0.1:*", "localhost:*", "[::1]:*"],
+    allowed_origins=["http://127.0.0.1:*", "http://localhost:*", "http://[::1]:*"],
+)
+
+
+def _streamable_http_options(settings: Settings) -> dict[str, Any]:
+    """Keyword arguments for ``mcp.run("streamable-http")``: bind address, modes, DNS-rebinding.
 
     Reading the toggle from Settings here (not at import time) is what makes it honour .env and the
     process environment. When enabled, protection is turned off (for a trusted proxy deployment);
-    otherwise the SDK's construction-time default (protection on) is left in place.
+    otherwise the localhost-only allowlist stays on.
     """
-    mcp.settings.host = settings.aiseg_host
-    mcp.settings.port = settings.aiseg_port
-    if settings.aiseg_disable_dns_rebinding_protection:
-        mcp.settings.transport_security = TransportSecuritySettings(
-            enable_dns_rebinding_protection=False
-        )
+    security = (
+        TransportSecuritySettings(enable_dns_rebinding_protection=False)
+        if settings.aiseg_disable_dns_rebinding_protection
+        else _LOCALHOST_ONLY
+    )
+    return {
+        "host": settings.aiseg_host,
+        "port": settings.aiseg_port,
+        "stateless_http": True,
+        "json_response": True,
+        "transport_security": security,
+    }
 
 
 def main() -> None:
@@ -264,8 +281,6 @@ def main() -> None:
     )
 
     if settings.aiseg_transport == "streamable-http":
-        _configure_streamable_http(settings)
-
         @mcp.custom_route("/health", methods=["GET"])
         async def health(_request):  # type: ignore[no-untyped-def]
             from starlette.responses import JSONResponse
@@ -277,7 +292,7 @@ def main() -> None:
             settings.aiseg_host,
             settings.aiseg_port,
         )
-        mcp.run(transport="streamable-http")
+        mcp.run("streamable-http", **_streamable_http_options(settings))
     else:
         logger.info("starting AiSEG2 MCP server (stdio)")
         mcp.run(transport="stdio")

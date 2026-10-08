@@ -24,18 +24,21 @@ AiSEG2 の Web インターフェースは非公開で、ファームウェア�
 
 ## ツール一覧
 
-すべて**読み取り専用**（`readOnlyHint`・非破壊のアノテーション付き）です。本サーバーは GET と、
-Web UI 自身が画面更新に使う表示用 POST のみを発行し、設定変更や `/action/` 系エンドポイントには
-一切触れません。
+すべて**読み取り専用**（`readOnlyHint`・非破壊・人が読む名前 `title` のアノテーション付き）です。
+本サーバーは GET と、Web UI 自身が画面更新に使う表示用 POST のみを発行し、設定変更や `/action/` 系
+エンドポイントには一切触れません。
 
-| ツール | 返す内容 |
-|---|---|
-| `get_power_flow` | 瞬時の発電/消費（kW）、売買電の状態、蓄電池状態、発電内訳、消費上位回路 |
-| `get_circuit_breakdown` | 計測回路ごとの瞬時消費電力（W）を降順で全件・合計付き |
-| `list_circuits` | 登録された回路の id と名称（名称の正本） |
-| `get_daily_totals` | 当日の発電/消費/買電/売電の積算（kWh） |
-| `get_history` | SD カードエクスポートからの長期履歴（Wh）をロング形式で。引数: `granularity`（`30min`/`hour`/`day`/`month`/`year`）、`start`/`end`（粒度に応じ `YYYY-MM-DD` / `YYYY-MM` / `YYYY`）、任意の `metrics`/`circuits` フィルタ、`limit`/`offset` ページング |
-| `get_cost_history` | SD カードエクスポートからの長期コスト履歴（円）。引数: `granularity`（`day`/`month`/`year`）、`start`/`end`、`limit`/`offset` |
+どの結果にもデータの時点 `as_of`（ISO 8601、UTC）が付きます。本サーバーが AiSEG2 から値を読んだ
+時刻で、履歴系 2 ツールでは元にした SD カードのエクスポートをダウンロードした時刻です。
+
+| ツール | title | 返す内容 |
+|---|---|---|
+| `get_power_flow` | Current power flow | 瞬時の発電/消費（kW）、売買電の状態、蓄電池状態、発電内訳、消費上位回路 |
+| `get_circuit_breakdown` | Current power by circuit | 計測回路ごとの瞬時消費電力（W）を降順で全件・合計付き |
+| `list_circuits` | Registered circuits | 登録された回路の id と名称（名称の正本） |
+| `get_daily_totals` | Today's energy totals | 当日の発電/消費/買電/売電の積算（kWh） |
+| `get_history` | Energy history | SD カードエクスポートからの長期履歴（Wh）をロング形式で。引数: `granularity`（`30min`/`hour`/`day`/`month`/`year`）、`start`/`end`（粒度に応じ `YYYY-MM-DD` / `YYYY-MM` / `YYYY`）、任意の `metrics`/`circuits` フィルタ、`limit`/`offset` ページング |
+| `get_cost_history` | Energy cost history | SD カードエクスポートからの長期コスト履歴（円）。引数: `granularity`（`day`/`month`/`year`）、`start`/`end`、`limit`/`offset` |
 
 > **履歴系 2 ツールは AiSEG2 に SD カードが挿入されている場合のみ動作する** — デバイスの SD カード CSV エクスポートを読む。エクスポートは 1 回だけダウンロードしてキャッシュする（`AISEG_CACHE_DIR` / `AISEG_CACHE_TTL` 参照）。初回呼び出しは遅く、以降は高速。
 
@@ -113,7 +116,7 @@ AiSEG2 を LAN 内に置いたまま claude.ai から接続するには、[`exam
 | `AISEG_TRANSPORT` | いいえ | `stdio` | `stdio` または `streamable-http` |
 | `AISEG_HOST` | いいえ | `0.0.0.0` | バインドホスト（streamable-http のみ） |
 | `AISEG_PORT` | いいえ | `8000` | バインドポート（streamable-http のみ） |
-| `AISEG_DISABLE_DNS_REBINDING_PROTECTION` | いいえ | `false` | SDK の Host 許可リストを無効化。**信頼できる認証プロキシ配下でのみ** |
+| `AISEG_DISABLE_DNS_REBINDING_PROTECTION` | いいえ | `false` | Host の許可リストを無効化（既定では Host が `localhost` / `127.0.0.1` / `[::1]` の要求だけを受ける）。**信頼できる認証プロキシ配下でのみ** |
 | `AISEG_CACHE_DIR` | いいえ | `<tempdir>/aiseg2-mcp-cache` | SD カード履歴エクスポートのキャッシュ先 |
 | `AISEG_CACHE_TTL` | いいえ | `3600` | キャッシュした履歴エクスポートを再ダウンロードするまでの秒数 |
 | `LOG_LEVEL` | いいえ | `info` | ログレベル |

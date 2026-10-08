@@ -43,8 +43,21 @@ async def test_all_tools_are_annotated_read_only_and_non_destructive():
     for tool in await mcp.list_tools():
         ann = tool.annotations
         assert ann is not None, f"{tool.name} has no annotations"
-        assert ann.readOnlyHint is True, f"{tool.name} is not readOnlyHint=True"
-        assert ann.destructiveHint is False, f"{tool.name} is not destructiveHint=False"
+        assert ann.read_only_hint is True, f"{tool.name} is not readOnlyHint=True"
+        assert ann.destructive_hint is False, f"{tool.name} is not destructiveHint=False"
+
+
+async def test_all_tools_have_a_distinct_title():
+    titles = [(t.annotations.title if t.annotations else None) for t in await mcp.list_tools()]
+    assert all(titles), titles
+    assert len(set(titles)) == len(titles), titles
+
+
+async def test_all_tools_return_as_of():
+    for tool in await mcp.list_tools():
+        assert tool.output_schema is not None, tool.name
+        assert "as_of" in tool.output_schema["properties"], f"{tool.name} has no as_of"
+        assert "as_of" in tool.output_schema["required"], f"{tool.name} as_of is optional"
 
 
 def test_source_never_calls_action_endpoints():
@@ -70,3 +83,9 @@ def test_client_only_requests_get_or_display_post_paths():
 
 def test_mcp_app_constructs():
     assert mcp is not None
+
+
+def test_server_reports_the_package_version():
+    from aiseg2_mcp.client import __version__
+
+    assert mcp.version == __version__

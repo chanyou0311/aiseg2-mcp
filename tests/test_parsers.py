@@ -8,6 +8,7 @@ pin the device's quirks: full-width normalization, "-" -> None, the <br/>-in-lab
 from __future__ import annotations
 
 import json
+from datetime import UTC, datetime
 
 import pytest
 
@@ -64,6 +65,13 @@ def test_parse_power_flow_fields(read_text):
         ("洋室３", 70.0),
         ("ＬＤ", 62.0),
     ]
+
+
+def test_parse_power_flow_as_of_is_the_read_time(read_text):
+    before = datetime.now(UTC).replace(microsecond=0)
+    flow = parsers.parse_power_flow(json.loads(read_text("electricflow_111.json")))
+    assert before <= flow.as_of <= datetime.now(UTC)
+    assert flow.model_dump(mode="json")["as_of"].endswith("Z")
 
 
 def test_parse_power_flow_buy_sell_mapping(read_text):

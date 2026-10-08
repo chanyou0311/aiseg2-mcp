@@ -1,15 +1,38 @@
-"""Pydantic return models — the typed shapes the four read-only tools hand back to the model.
+"""Pydantic return models — the typed shapes the read-only tools hand back to the model.
 
 Kept deliberately small: only the fields a caller reasons about ("how much am I generating /
 consuming right now", "which circuits draw the most", "what are the day's totals"). Units are
 encoded in the field names (``_kw`` / ``_kwh`` / ``watt``) so the model never has to guess.
+Every result carries ``as_of`` so the caller can tell when the values were read.
 """
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from typing import Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict, Field
+
+
+def now() -> datetime:
+    """The current time in UTC, to the second (the precision of an ``as_of``)."""
+    return datetime.now(UTC).replace(microsecond=0)
+
+
+def _require_as_of(schema: dict) -> None:
+    schema.setdefault("required", []).append("as_of")
+
+
+class Live(BaseModel):
+    """A reading of the device's current screens. Built right after the read, so ``as_of`` is then."""
+
+    # The default always fills as_of, so the output schema lists it as required like SeriesPage's.
+    model_config = ConfigDict(json_schema_extra=_require_as_of)
+
+    as_of: datetime = Field(
+        default_factory=now,
+        description="When this server read the values from the AiSEG2 (ISO 8601, UTC).",
+    )
 
 
 class NamedWatt(BaseModel):
@@ -34,7 +57,7 @@ class BatteryStatus(BaseModel):
     charging: bool | None = None
 
 
-class PowerFlow(BaseModel):
+class PowerFlow(Live):
     """The instantaneous whole-home power flow (the AiSEG2 "electric flow" screen)."""
 
     generation_kw: float
@@ -55,7 +78,7 @@ class CircuitWatt(BaseModel):
     watt: float
 
 
-class CircuitBreakdown(BaseModel):
+class CircuitBreakdown(Live):
     """Per-circuit instantaneous consumption, paged out of the AiSEG2 and stitched together."""
 
     circuits: list[CircuitWatt]
@@ -70,13 +93,13 @@ class CircuitInfo(BaseModel):
     name: str
 
 
-class CircuitList(BaseModel):
+class CircuitList(Live):
     """The registered circuit names — the authoritative source of circuit naming."""
 
     circuits: list[CircuitInfo]
 
 
-class DailyTotals(BaseModel):
+class DailyTotals(Live):
     """Today's cumulative energy totals in kWh (as of the AiSEG2's current day)."""
 
     date: str
@@ -102,6 +125,12 @@ class SeriesPage(BaseModel):
 
     granularity: str
     unit: str
+    as_of: datetime = Field(
+        description=(
+            "When the SD-card export behind these values was downloaded (ISO 8601, UTC). "
+            "An upper bound: nothing later is included, and the device's export may lag behind it."
+        )
+    )
     series: list[HistorySeriesPoint]
     has_more: bool
     total_rows: int
