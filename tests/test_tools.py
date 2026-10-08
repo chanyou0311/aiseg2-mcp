@@ -47,6 +47,18 @@ async def test_all_tools_are_annotated_read_only_and_non_destructive():
         assert ann.destructive_hint is False, f"{tool.name} is not destructiveHint=False"
 
 
+async def test_all_tools_have_a_distinct_title():
+    titles = [(t.annotations.title if t.annotations else None) for t in await mcp.list_tools()]
+    assert all(titles), titles
+    assert len(set(titles)) == len(titles), titles
+
+
+async def test_all_tools_return_as_of():
+    for tool in await mcp.list_tools():
+        assert tool.output_schema is not None, tool.name
+        assert "as_of" in tool.output_schema["properties"], f"{tool.name} has no as_of"
+
+
 def test_source_never_calls_action_endpoints():
     # No code path may hit the AiSEG2's mutating /action/ endpoints.
     pattern = re.compile(r"/action/")
@@ -70,3 +82,9 @@ def test_client_only_requests_get_or_display_post_paths():
 
 def test_mcp_app_constructs():
     assert mcp is not None
+
+
+def test_server_reports_the_package_version():
+    from importlib.metadata import version
+
+    assert mcp.version == version("aiseg2-mcp")

@@ -9,8 +9,10 @@ utility meters, and the per-granularity timestamp formats).
 from __future__ import annotations
 
 import io
+import os
 import zipfile
 from collections.abc import Callable
+from datetime import UTC, datetime
 
 import pytest
 
@@ -180,6 +182,18 @@ async def test_store_get_history_and_download_cached(store_and_client):
         "day", "2025-07-01", "2025-07-02", metrics=None, circuits=None, limit=50, offset=0
     )
     assert client.calls == 1  # cached extraction reused
+    assert page.as_of == datetime.fromtimestamp(int(store._fetched_at), UTC)
+
+
+async def test_store_as_of_is_the_download_time_of_an_adopted_cache(store_and_client, tmp_path):
+    store, _ = store_and_client()
+    await store.get_history("day", "2025-07-01", "2025-07-01", None, None, 10, 0)
+    downloaded = 1_700_000_000
+    os.utime(tmp_path / "cache" / ".fetched", (downloaded, downloaded))
+    restarted, client = store_and_client(ttl=10**10)  # a new process within the TTL
+    page = await restarted.get_cost_history("day", "2025-07-01", "2025-07-01", 10, 0)
+    assert client.calls == 0
+    assert page.as_of == datetime.fromtimestamp(downloaded, UTC)
 
 
 async def test_store_cost_history_shares_download(store_and_client):

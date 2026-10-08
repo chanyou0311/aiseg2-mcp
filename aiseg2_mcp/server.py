@@ -4,7 +4,9 @@ Six tools, all read-only: the instantaneous whole-home flow, the per-circuit bre
 registered circuit names, today's cumulative kWh totals, and the long-term energy / cost history
 from the SD-card export. There is deliberately NO tool that changes any device setting — the client
 only issues GETs and the display-only refresh POSTs the web UI itself uses. Every tool is annotated
-readOnlyHint=True / destructiveHint=False so a caller can see the surface is non-mutating.
+readOnlyHint=True / destructiveHint=False so a caller can see the surface is non-mutating, and
+every result carries ``as_of`` (when the values were read from the device, or for the SD-card
+history when the export was downloaded).
 
 Each tool is wrapped by ``_audited``, which records a structured audit line on success and on
 failure and normalizes a parser ValueError into a ToolError — so every outcome is audited and every
@@ -26,6 +28,7 @@ from __future__ import annotations
 
 import functools
 import logging
+from importlib.metadata import version
 from collections.abc import Awaitable, Callable
 from typing import Any, Literal, TypeVar
 
@@ -51,7 +54,8 @@ logger = logging.getLogger("aiseg2_mcp")
 # response bodies are NEVER part of a message.
 audit = logging.getLogger("aiseg2_mcp.audit")
 
-mcp = MCPServer("aiseg2-mcp")
+# v2 no longer fills serverInfo.version on its own.
+mcp = MCPServer("aiseg2-mcp", version=version("aiseg2-mcp"))
 
 # Built in main(); the tools read these module globals.
 _aiseg: AisegClient | None = None
@@ -70,14 +74,17 @@ def _store() -> HistoryStore:
     return _history
 
 
-# Shared annotations: every tool is a read-only, non-destructive, idempotent observation of a
-# device on the local network (no open-world/random effects).
-_READ_ONLY = ToolAnnotations(
-    readOnlyHint=True,
-    destructiveHint=False,
-    idempotentHint=True,
-    openWorldHint=False,
-)
+# Every tool is a read-only, non-destructive, idempotent observation of a device on the local
+# network (no open-world/random effects); only the human-readable title differs.
+def _read_only(title: str) -> ToolAnnotations:
+    return ToolAnnotations(
+        title=title,
+        readOnlyHint=True,
+        destructiveHint=False,
+        idempotentHint=True,
+        openWorldHint=False,
+    )
+
 
 _R = TypeVar("_R")
 
@@ -111,7 +118,7 @@ def _audited(
     return decorator
 
 
-@mcp.tool(annotations=_READ_ONLY)
+@mcp.tool(annotations=_read_only("Current power flow"))
 @_audited(
     "get_power_flow",
     lambda f: f"gen_kw={f.generation_kw} con_kw={f.consumption_kw} buy_sell={f.buy_sell}",
@@ -126,7 +133,7 @@ async def get_power_flow() -> PowerFlow:
     return parsers.parse_power_flow(await _client().fetch_power_flow())
 
 
-@mcp.tool(annotations=_READ_ONLY)
+@mcp.tool(annotations=_read_only("Current power by circuit"))
 @_audited(
     "get_circuit_breakdown", lambda b: f"circuits={len(b.circuits)} pages={b.page_count}"
 )
@@ -140,7 +147,7 @@ async def get_circuit_breakdown() -> CircuitBreakdown:
     return parsers.assemble_breakdown(await _client().fetch_circuit_pages())
 
 
-@mcp.tool(annotations=_READ_ONLY)
+@mcp.tool(annotations=_read_only("Registered circuits"))
 @_audited("list_circuits", lambda c: f"count={len(c.circuits)}")
 async def list_circuits() -> CircuitList:
     """Read-only. List the registered measurement circuits with their stable ids and names.
@@ -152,7 +159,7 @@ async def list_circuits() -> CircuitList:
     return CircuitList(circuits=parsers.parse_installation_circuits(await _client().fetch_installation_html()))
 
 
-@mcp.tool(annotations=_READ_ONLY)
+@mcp.tool(annotations=_read_only("Today's energy totals"))
 @_audited("get_daily_totals", lambda t: f"date={t.date}")
 async def get_daily_totals() -> DailyTotals:
     """Read-only. Get today's cumulative energy totals (kWh) as of the AiSEG2's current day.
@@ -163,7 +170,7 @@ async def get_daily_totals() -> DailyTotals:
     return await _client().fetch_daily_totals()
 
 
-@mcp.tool(annotations=_READ_ONLY)
+@mcp.tool(annotations=_read_only("Energy history"))
 @_audited(
     "get_history",
     lambda p: f"granularity={p.granularity} points={len(p.series)} total={p.total_rows}",
@@ -198,7 +205,7 @@ async def get_history(
     return await _store().get_history(granularity, start, end, metrics, circuits, limit, offset)
 
 
-@mcp.tool(annotations=_READ_ONLY)
+@mcp.tool(annotations=_read_only("Energy cost history"))
 @_audited(
     "get_cost_history",
     lambda p: f"granularity={p.granularity} points={len(p.series)} total={p.total_rows}",
