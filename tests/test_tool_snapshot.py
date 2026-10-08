@@ -17,8 +17,8 @@ SNAPSHOT = pathlib.Path(__file__).parent / "fixtures" / "tool_surface.json"
 async def _surface() -> dict[str, dict[str, object]]:
     return {
         tool.name: {
-            "annotations": tool.annotations.model_dump(exclude_none=True) if tool.annotations else None,
-            "inputSchema": tool.inputSchema,
+            "annotations": tool.annotations.model_dump(by_alias=True, exclude_none=True) if tool.annotations else None,
+            "inputSchema": tool.input_schema,
         }
         for tool in sorted(await mcp.list_tools(), key=lambda t: t.name)
     }

@@ -43,8 +43,8 @@ async def test_all_tools_are_annotated_read_only_and_non_destructive():
     for tool in await mcp.list_tools():
         ann = tool.annotations
         assert ann is not None, f"{tool.name} has no annotations"
-        assert ann.readOnlyHint is True, f"{tool.name} is not readOnlyHint=True"
-        assert ann.destructiveHint is False, f"{tool.name} is not destructiveHint=False"
+        assert ann.read_only_hint is True, f"{tool.name} is not readOnlyHint=True"
+        assert ann.destructive_hint is False, f"{tool.name} is not destructiveHint=False"
 
 
 def test_source_never_calls_action_endpoints():

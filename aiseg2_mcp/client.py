@@ -20,7 +20,7 @@ import re
 from importlib.metadata import PackageNotFoundError, version
 
 import httpx
-from mcp.server.fastmcp.exceptions import ToolError
+from mcp.server.mcpserver.exceptions import ToolError
 
 from . import parsers
 from .models import DailyTotals

@@ -225,7 +225,7 @@ async def test_store_non_csv_is_ignored(store_and_client, tmp_path):
 
 
 async def test_store_rejects_wrong_range_format(store_and_client):
-    from mcp.server.fastmcp.exceptions import ToolError
+    from mcp.server.mcpserver.exceptions import ToolError
 
     store, client = store_and_client()
     with pytest.raises(ToolError, match="expected format YYYY-MM for granularity=month"):
@@ -236,7 +236,7 @@ async def test_store_rejects_wrong_range_format(store_and_client):
 
 
 async def test_store_out_of_range_raises_with_hint(store_and_client):
-    from mcp.server.fastmcp.exceptions import ToolError
+    from mcp.server.mcpserver.exceptions import ToolError
 
     store, _ = store_and_client()
     with pytest.raises(ToolError) as excinfo:

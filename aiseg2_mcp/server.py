@@ -1,4 +1,4 @@
-"""FastMCP server exposing a Panasonic AiSEG2 HEMS controller, READ-ONLY.
+"""MCP server (official SDK v2 ``MCPServer``) exposing a Panasonic AiSEG2 HEMS controller, READ-ONLY.
 
 Six tools, all read-only: the instantaneous whole-home flow, the per-circuit breakdown, the
 registered circuit names, today's cumulative kWh totals, and the long-term energy / cost history
@@ -27,12 +27,12 @@ from __future__ import annotations
 import functools
 import logging
 from collections.abc import Awaitable, Callable
-from typing import Literal, TypeVar
+from typing import Any, Literal, TypeVar
 
-from mcp.server.fastmcp import FastMCP
-from mcp.server.fastmcp.exceptions import ToolError
+from mcp.server.mcpserver import MCPServer
+from mcp.server.mcpserver.exceptions import ToolError
 from mcp.server.transport_security import TransportSecuritySettings
-from mcp.types import ToolAnnotations
+from mcp_types import ToolAnnotations
 
 from . import parsers
 from .client import AisegClient
@@ -51,11 +51,7 @@ logger = logging.getLogger("aiseg2_mcp")
 # response bodies are NEVER part of a message.
 audit = logging.getLogger("aiseg2_mcp.audit")
 
-mcp = FastMCP(
-    "aiseg2-mcp",
-    stateless_http=True,
-    json_response=True,
-)
+mcp = MCPServer("aiseg2-mcp")
 
 # Built in main(); the tools read these module globals.
 _aiseg: AisegClient | None = None
@@ -229,19 +225,34 @@ async def get_cost_history(
     return await _store().get_cost_history(granularity, start, end, limit, offset)
 
 
-def _configure_streamable_http(settings: Settings) -> None:
-    """Apply streamable-http settings to ``mcp`` before run(): bind address + DNS-rebinding toggle.
+# SDK v1 enabled this localhost-only allowlist at construction and kept it after the bind moved;
+# v2 decides at run() from the bind host, so pin the v1 behaviour explicitly.
+_LOCALHOST_ONLY = TransportSecuritySettings(
+    enable_dns_rebinding_protection=True,
+    allowed_hosts=["127.0.0.1:*", "localhost:*", "[::1]:*"],
+    allowed_origins=["http://127.0.0.1:*", "http://localhost:*", "http://[::1]:*"],
+)
+
+
+def _streamable_http_options(settings: Settings) -> dict[str, Any]:
+    """Keyword arguments for ``mcp.run("streamable-http")``: bind address, modes, DNS-rebinding.
 
     Reading the toggle from Settings here (not at import time) is what makes it honour .env and the
     process environment. When enabled, protection is turned off (for a trusted proxy deployment);
-    otherwise the SDK's construction-time default (protection on) is left in place.
+    otherwise the localhost-only allowlist stays on.
     """
-    mcp.settings.host = settings.aiseg_host
-    mcp.settings.port = settings.aiseg_port
-    if settings.aiseg_disable_dns_rebinding_protection:
-        mcp.settings.transport_security = TransportSecuritySettings(
-            enable_dns_rebinding_protection=False
-        )
+    security = (
+        TransportSecuritySettings(enable_dns_rebinding_protection=False)
+        if settings.aiseg_disable_dns_rebinding_protection
+        else _LOCALHOST_ONLY
+    )
+    return {
+        "host": settings.aiseg_host,
+        "port": settings.aiseg_port,
+        "stateless_http": True,
+        "json_response": True,
+        "transport_security": security,
+    }
 
 
 def main() -> None:
@@ -264,8 +275,6 @@ def main() -> None:
     )
 
     if settings.aiseg_transport == "streamable-http":
-        _configure_streamable_http(settings)
-
         @mcp.custom_route("/health", methods=["GET"])
         async def health(_request):  # type: ignore[no-untyped-def]
             from starlette.responses import JSONResponse
@@ -277,7 +286,7 @@ def main() -> None:
             settings.aiseg_host,
             settings.aiseg_port,
         )
-        mcp.run(transport="streamable-http")
+        mcp.run("streamable-http", **_streamable_http_options(settings))
     else:
         logger.info("starting AiSEG2 MCP server (stdio)")
         mcp.run(transport="stdio")
