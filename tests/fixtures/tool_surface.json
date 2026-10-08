@@ -1,0 +1,178 @@
+{
+  "get_circuit_breakdown": {
+    "annotations": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false
+    },
+    "inputSchema": {
+      "properties": {},
+      "title": "get_circuit_breakdownArguments",
+      "type": "object"
+    }
+  },
+  "get_cost_history": {
+    "annotations": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false
+    },
+    "inputSchema": {
+      "properties": {
+        "granularity": {
+          "enum": [
+            "day",
+            "month",
+            "year"
+          ],
+          "title": "Granularity",
+          "type": "string"
+        },
+        "start": {
+          "title": "Start",
+          "type": "string"
+        },
+        "end": {
+          "title": "End",
+          "type": "string"
+        },
+        "limit": {
+          "default": 200,
+          "title": "Limit",
+          "type": "integer"
+        },
+        "offset": {
+          "default": 0,
+          "title": "Offset",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "granularity",
+        "start",
+        "end"
+      ],
+      "title": "get_cost_historyArguments",
+      "type": "object"
+    }
+  },
+  "get_daily_totals": {
+    "annotations": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false
+    },
+    "inputSchema": {
+      "properties": {},
+      "title": "get_daily_totalsArguments",
+      "type": "object"
+    }
+  },
+  "get_history": {
+    "annotations": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false
+    },
+    "inputSchema": {
+      "properties": {
+        "granularity": {
+          "enum": [
+            "30min",
+            "hour",
+            "day",
+            "month",
+            "year"
+          ],
+          "title": "Granularity",
+          "type": "string"
+        },
+        "start": {
+          "title": "Start",
+          "type": "string"
+        },
+        "end": {
+          "title": "End",
+          "type": "string"
+        },
+        "metrics": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Metrics"
+        },
+        "circuits": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Circuits"
+        },
+        "limit": {
+          "default": 200,
+          "title": "Limit",
+          "type": "integer"
+        },
+        "offset": {
+          "default": 0,
+          "title": "Offset",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "granularity",
+        "start",
+        "end"
+      ],
+      "title": "get_historyArguments",
+      "type": "object"
+    }
+  },
+  "get_power_flow": {
+    "annotations": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false
+    },
+    "inputSchema": {
+      "properties": {},
+      "title": "get_power_flowArguments",
+      "type": "object"
+    }
+  },
+  "list_circuits": {
+    "annotations": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false
+    },
+    "inputSchema": {
+      "properties": {},
+      "title": "list_circuitsArguments",
+      "type": "object"
+    }
+  }
+}
