@@ -11,7 +11,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 def now() -> datetime:
@@ -19,8 +19,15 @@ def now() -> datetime:
     return datetime.now(UTC).replace(microsecond=0)
 
 
+def _require_as_of(schema: dict) -> None:
+    schema.setdefault("required", []).append("as_of")
+
+
 class Live(BaseModel):
     """A reading of the device's current screens. Built right after the read, so ``as_of`` is then."""
+
+    # The default always fills as_of, so the output schema lists it as required like SeriesPage's.
+    model_config = ConfigDict(json_schema_extra=_require_as_of)
 
     as_of: datetime = Field(
         default_factory=now,
@@ -121,7 +128,7 @@ class SeriesPage(BaseModel):
     as_of: datetime = Field(
         description=(
             "When the SD-card export behind these values was downloaded (ISO 8601, UTC). "
-            "Data recorded after this is not included."
+            "An upper bound: nothing later is included, and the device's export may lag behind it."
         )
     )
     series: list[HistorySeriesPoint]

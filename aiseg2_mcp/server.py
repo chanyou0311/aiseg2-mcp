@@ -28,7 +28,6 @@ from __future__ import annotations
 
 import functools
 import logging
-from importlib.metadata import version
 from collections.abc import Awaitable, Callable
 from typing import Any, Literal, TypeVar
 
@@ -38,7 +37,7 @@ from mcp.server.transport_security import TransportSecuritySettings
 from mcp_types import ToolAnnotations
 
 from . import parsers
-from .client import AisegClient
+from .client import AisegClient, __version__
 from .config import Settings
 from .history import HistoryStore
 from .models import (
@@ -55,7 +54,7 @@ logger = logging.getLogger("aiseg2_mcp")
 audit = logging.getLogger("aiseg2_mcp.audit")
 
 # v2 no longer fills serverInfo.version on its own.
-mcp = MCPServer("aiseg2-mcp", version=version("aiseg2-mcp"))
+mcp = MCPServer("aiseg2-mcp", version=__version__)
 
 # Built in main(); the tools read these module globals.
 _aiseg: AisegClient | None = None

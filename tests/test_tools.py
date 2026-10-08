@@ -57,6 +57,7 @@ async def test_all_tools_return_as_of():
     for tool in await mcp.list_tools():
         assert tool.output_schema is not None, tool.name
         assert "as_of" in tool.output_schema["properties"], f"{tool.name} has no as_of"
+        assert "as_of" in tool.output_schema["required"], f"{tool.name} as_of is optional"
 
 
 def test_source_never_calls_action_endpoints():
@@ -85,6 +86,6 @@ def test_mcp_app_constructs():
 
 
 def test_server_reports_the_package_version():
-    from importlib.metadata import version
+    from aiseg2_mcp.client import __version__
 
-    assert mcp.version == version("aiseg2-mcp")
+    assert mcp.version == __version__
