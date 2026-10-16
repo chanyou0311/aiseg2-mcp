@@ -17,9 +17,9 @@ Panasonic **AiSEG2**（HEMS コントローラー）を対象とした、**非�
 - AiSEG2 機種: **MKN713** 系
 - ファームウェア: **Ver.2.97I-01**
 
-AiSEG2 の Web インターフェースは非公開で、ファームウェアの版により変化します。
+AiSEG2 の Web インターフェースは非公開で、ファームウェアのバージョンにより変化します。
 **機種やファームウェアが異なると、本サーバーがスクレイプするページの構造が変わり、一部のツールが
-動作しない可能性があります。** パースエラーが出た場合は、機種・ファームウェア版を添えて issue を
+動作しない可能性があります。** パースエラーが出た場合は、機種・ファームウェアのバージョンを添えて issue を
 立ててください。
 
 ## ツール一覧
@@ -35,7 +35,7 @@ AiSEG2 の Web インターフェースは非公開で、ファームウェア�
 |---|---|---|
 | `get_power_flow` | Current power flow | 瞬時の発電/消費（kW）、売買電の状態、蓄電池状態、発電内訳、消費上位回路 |
 | `get_circuit_breakdown` | Current power by circuit | 計測回路ごとの瞬時消費電力（W）を降順で全件・合計付き |
-| `list_circuits` | Registered circuits | 登録された回路の id と名称（名称の正本） |
+| `list_circuits` | Registered circuits | 登録された回路の id と名称（名称の参照元） |
 | `get_daily_totals` | Today's energy totals | 当日の発電/消費/買電/売電の積算（kWh） |
 | `get_history` | Energy history | SD カードエクスポートからの長期履歴（Wh）をロング形式で。引数: `granularity`（`30min`/`hour`/`day`/`month`/`year`）、`start`/`end`（粒度に応じ `YYYY-MM-DD` / `YYYY-MM` / `YYYY`）、任意の `metrics`/`circuits` フィルタ、`limit`/`offset` ページング |
 | `get_cost_history` | Energy cost history | SD カードエクスポートからの長期コスト履歴（円）。引数: `granularity`（`day`/`month`/`year`）、`start`/`end`、`limit`/`offset` |
@@ -94,13 +94,13 @@ AiSEG2 を LAN 内に置いたまま claude.ai から接続するには、[`exam
 本リポジトリの仕事は GHCR へのイメージ push までで完結します。実際にどこでどう動かすか
 （Kubernetes マニフェスト等）は別リポジトリの管轄です（メンテナ自身の本番環境では
 [fumo-infra](https://github.com/chanyou0311/fumo-infra)）。以下は他システムが本イメージを動かす
-際に頼ってよい契約です。
+際に頼ってよい取り決めです。
 
 | | |
 |---|---|
 | イメージとタグ | `ghcr.io/chanyou0311/aiseg2-mcp:sha-<7hex>` を `main` への push ごとに push（作成日時はビルド時刻でなく元の commit の時刻）。`vX.Y.Z` の release タグでは追加で `X.Y.Z` / `X.Y` / `latest` も push |
 | 待ち受け | `8000/tcp` — streamable-http の MCP エンドポイント `/mcp` |
-| 正常性の口 | liveness: `GET /health`、readiness: ポート `8000` への TCP 接続 |
+| ヘルスチェック | liveness: `GET /health`、readiness: ポート `8000` への TCP 接続 |
 | 必須の環境変数 | `AISEG_URL`、`AISEG_PASSWORD`（秘密） |
 | 任意の環境変数（既定値） | `AISEG_USER`（`aiseg`）、`AISEG_TRANSPORT`（`streamable-http` — イメージの `ENV` で設定。パッケージ自体の既定値は `stdio`）、`AISEG_HOST`（`0.0.0.0`）、`AISEG_PORT`（`8000`）、`AISEG_DISABLE_DNS_REBINDING_PROTECTION`（`false`）、`AISEG_CACHE_DIR`（`<tempdir>/aiseg2-mcp-cache`）、`AISEG_CACHE_TTL`（`3600`）、`LOG_LEVEL`（`info`） — 詳細は下記[設定](#設定環境変数)参照 |
 
