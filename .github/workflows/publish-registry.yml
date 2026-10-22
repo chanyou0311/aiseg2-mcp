@@ -17,7 +17,7 @@ jobs:
       id-token: write  # GitHub OIDC login to the MCP registry
       contents: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - name: Stamp version into server.json
         run: |
           jq --arg v "${{ inputs.version }}" '.version = $v | .packages |= map(if .registryType == "oci" then (.identifier |= (split(":")[0] + ":" + $v)) | del(.version) else .version = $v end)' server.json > server.json.tmp
