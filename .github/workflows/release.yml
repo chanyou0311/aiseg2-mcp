@@ -21,7 +21,7 @@ jobs:
         with:
           fetch-depth: 0
           fetch-tags: true
-      - uses: astral-sh/setup-uv@v5
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
       - run: uv sync --locked
       - run: uv run pytest -q
 
@@ -36,7 +36,7 @@ jobs:
         with:
           fetch-depth: 0
           fetch-tags: true  # hatch-vcs derives the version from the tag
-      - uses: astral-sh/setup-uv@v5
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
       - name: Build sdist + wheel
         run: uv build
       - name: Publish to PyPI
