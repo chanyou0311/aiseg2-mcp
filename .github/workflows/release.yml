@@ -15,7 +15,7 @@ env:
 
 jobs:
   test:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -27,7 +27,7 @@ jobs:
 
   publish-pypi:
     needs: test
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     environment: pypi
     permissions:
       id-token: write  # Trusted Publishing (OIDC); no API token needed
@@ -89,7 +89,7 @@ jobs:
 
   merge-ghcr:
     needs: publish-ghcr
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     permissions:
       contents: read
       packages: write
@@ -127,7 +127,7 @@ jobs:
 
   publish-mcp-registry:
     needs: [publish-pypi, merge-ghcr]
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     permissions:
       id-token: write  # GitHub OIDC login to the MCP registry
       contents: read
