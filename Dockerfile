@@ -27,7 +27,7 @@ RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --locked --no-dev --no-editable
 
 # --- runtime stage ---------------------------------------------------------------------------
-FROM python:3.12-slim-bookworm
+FROM python:3.15-slim-bookworm@sha256:96599df822d0e1c6bb700014a05c7f3c8cabc6e0f7ff3c4f9f69cee033b4b5d9
 LABEL io.modelcontextprotocol.server.name="io.github.chanyou0311/aiseg2-mcp"
 LABEL org.opencontainers.image.source="https://github.com/chanyou0311/aiseg2-mcp"
 WORKDIR /app
